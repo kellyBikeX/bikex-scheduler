@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>BikeX — Bike Pickup Scheduler</title>
+<style>
+  :root{--svbe-dark:#1b351b;--svbe-sage:#bedba5;--svbe-orange:#ff914d;--svbe-blue:#79a8ff;--svbe-brown:#625140;}
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:#f5f5f3;font-family:'Lucida Sans','Open Sans',sans-serif;padding:1rem;}
+  .app{max-width:700px;margin:0 auto;padding:1.5rem 1rem;}
+  .header{background:var(--svbe-dark);color:white;border-radius:12px;padding:1.25rem 1.5rem;margin-bottom:1.5rem;display:flex;align-items:center;justify-content:space-between;}
+  .header-left{display:flex;align-items:center;gap:12px;}
+  .header-logo{width:36px;height:36px;background:var(--svbe-sage);border-radius:50%;display:flex;align-items:center;justify-content:center;}
+  .header-logo svg{width:22px;height:22px;}
+  .header-title{font-size:17px;font-weight:500;color:white;}
+  .header-sub{font-size:12px;color:var(--svbe-sage);margin-top:2px;}
+  .lock-btn{font-size:12px;color:var(--svbe-sage);background:rgba(255,255,255,0.1);border:0.5px solid rgba(255,255,255,0.2);border-radius:6px;padding:5px 10px;cursor:pointer;display:none;}
+  .lock-btn:hover{background:rgba(255,255,255,0.18);}
+  .tab-bar{display:flex;gap:8px;margin-bottom:1.5rem;flex-wrap:wrap;}
+  .tab{padding:8px 16px;border-radius:8px;border:1px solid #ccc;background:white;font-size:14px;cursor:pointer;color:#555;transition:all 0.15s;}
+  .tab.active{background:var(--svbe-dark);color:white;border-color:var(--svbe-dark);}
+  .tab:hover:not(.active){background:#f0f0ee;}
+  .tab.admin-tab{display:none;}
+  .panel{display:none;}
+  .panel.active{display:block;}
+  .section-label{font-size:12px;color:#888;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;font-weight:500;}
+  .card{background:white;border:1px solid #e5e5e0;border-radius:12px;padding:1.25rem;margin-bottom:1rem;}
+  .appt-cards{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:1rem;}
+  @media(max-width:480px){.appt-cards{grid-template-columns:1fr;}}
+  .appt-card{border:2px solid #e5e5e0;border-radius:14px;padding:1.25rem 1rem;cursor:pointer;transition:all 0.18s;background:white;text-align:center;}
+  .appt-card:hover{border-color:var(--svbe-dark);background:#f4faf0;}
+  .appt-card.selected{border-color:var(--svbe-dark);background:#eaf4e2;}
+  .appt-card-icon{font-size:32px;margin-bottom:10px;line-height:1;}
+  .appt-card-title{font-size:15px;font-weight:500;color:#111;margin-bottom:6px;}
+  .appt-card-duration{display:inline-block;font-size:11px;font-weight:500;padding:3px 9px;border-radius:20px;margin-bottom:8px;}
+  .duration-60{background:#eaf4e2;color:#1b351b;}
+  .duration-30{background:#fff8f0;color:#854f0b;}
+  .appt-card-desc{font-size:12px;color:#666;line-height:1.5;}
+  .appt-card-rec{font-size:11px;color:var(--svbe-orange);font-weight:500;margin-top:6px;}
+  .student-notice{display:flex;align-items:flex-start;gap:10px;background:#fff8f0;border:1px solid #ffcfa0;border-radius:10px;padding:10px 14px;margin-bottom:1rem;font-size:13px;color:var(--svbe-brown);line-height:1.5;}
+  .student-notice-icon{flex-shrink:0;font-size:18px;margin-top:1px;}
+  .slot-row{display:flex;gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap;}
+  .slot-row input[type="date"],.slot-row input[type="time"]{flex:1;min-width:90px;padding:8px 10px;border:1px solid #ccc;border-radius:8px;font-size:14px;background:#f9f9f7;color:#111;}
+  .slot-row select{flex:1;min-width:100px;padding:8px 10px;border:1px solid #ccc;border-radius:8px;font-size:14px;background:#f9f9f7;color:#111;}
+  input:disabled,select:disabled{opacity:0.4;cursor:not-allowed;}
+  .btn-add{padding:8px 16px;background:var(--svbe-dark);color:white;border:none;border-radius:8px;font-size:14px;cursor:pointer;font-weight:500;}
+  .btn-add:disabled{opacity:0.4;cursor:not-allowed;}
+  .btn-remove{width:28px;height:28px;border:1px solid #ccc;border-radius:6px;background:#f5f5f3;color:#888;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .btn-remove:hover{background:#fcebeb;color:#a32d2d;border-color:#f09595;}
+  .slot-list{display:flex;flex-direction:column;gap:8px;}
+  .slot-item{display:flex;align-items:center;gap:10px;padding:10px 14px;border:1px solid #e5e5e0;border-radius:10px;background:#f9f9f7;}
+  .slot-meta{flex:1;font-size:14px;color:#111;min-width:0;}
+  .slot-meta-sub{font-size:12px;color:#888;margin-top:2px;}
+  .person-tag{font-size:11px;border-radius:4px;padding:2px 7px;font-weight:500;}
+  .tag-svbe{background:#eaf4e2;color:#1b351b;}
+  .tag-tim{background:#e6f1fb;color:#185fa5;}
+  .tag-julie{background:#faeeda;color:#633806;}
+  .booking-slots{display:grid;gap:10px;}
+  .book-slot{padding:14px 16px;border:2px solid #e5e5e0;border-radius:10px;background:white;cursor:pointer;transition:all 0.15s;}
+  .book-slot:hover{border-color:var(--svbe-dark);background:#f4faf0;}
+  .book-slot.selected{border-color:var(--svbe-dark);background:#eaf4e2;}
+  .book-slot-date{font-size:15px;font-weight:500;color:#111;}
+  .book-slot-details{font-size:13px;color:#666;margin-top:4px;}
+  .lci-select-wrap{margin-top:10px;display:none;}
+  .lci-select-wrap.visible{display:block;}
+  .lci-select-wrap label{font-size:13px;color:#666;font-weight:500;display:block;margin-bottom:5px;}
+  .lci-select-wrap select{width:100%;padding:8px 10px;border:1px solid #ccc;border-radius:8px;font-size:14px;background:#f9f9f7;color:#111;}
+  .form-group{margin-bottom:14px;}
+  .form-group label{display:block;font-size:13px;color:#666;margin-bottom:5px;font-weight:500;}
+  .form-group input{width:100%;padding:9px 12px;border:1px solid #ccc;border-radius:8px;font-size:14px;background:#f9f9f7;color:#111;}
+  .btn-confirm{width:100%;padding:11px;background:var(--svbe-orange);color:white;border:none;border-radius:8px;font-size:15px;font-weight:500;cursor:pointer;margin-top:8px;}
+  .btn-confirm:disabled{opacity:0.4;cursor:not-allowed;}
+  .btn-back{background:none;border:none;color:#888;font-size:13px;cursor:pointer;padding:0;margin-bottom:1rem;text-decoration:underline;}
+  .success-box{background:#eaf4e2;border:1px solid var(--svbe-sage);border-radius:10px;padding:1.5rem;text-align:center;}
+  .success-title{font-size:17px;font-weight:500;color:var(--svbe-dark);margin-bottom:6px;}
+  .success-detail{font-size:13px;color:var(--svbe-brown);line-height:1.6;}
+  .error-msg{font-size:13px;color:#a32d2d;background:#fcebeb;border:1px solid #f09595;border-radius:8px;padding:9px 13px;margin-top:10px;display:none;}
+  .info-box{font-size:12px;color:#888;background:#f5f5f3;border-radius:8px;padding:10px 14px;margin-bottom:1rem;}
+  .hours-row{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid #e5e5e0;border-radius:8px;background:#f9f9f7;margin-bottom:8px;flex-wrap:wrap;}
+  .hours-row.closed{opacity:0.5;}
+  .toggle{position:relative;display:inline-block;width:32px;height:18px;flex-shrink:0;}
+  .toggle input{opacity:0;width:0;height:0;}
+  .slider{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:#ccc;border-radius:18px;transition:0.2s;}
+  .slider:before{position:absolute;content:"";height:12px;width:12px;left:3px;bottom:3px;background:white;border-radius:50%;transition:0.2s;}
+  input:checked+.slider{background:var(--svbe-dark);}
+  input:checked+.slider:before{transform:translateX(14px);}
+  .bookings-table{width:100%;font-size:13px;border-collapse:collapse;}
+  .bookings-table th{text-align:left;padding:8px 10px;color:#888;font-weight:500;border-bottom:1px solid #e5e5e0;}
+  .bookings-table td{padding:9px 10px;border-bottom:1px solid #e5e5e0;color:#111;vertical-align:top;}
+  .empty-state{text-align:center;padding:2rem;color:#888;font-size:14px;}
+  .cutoff-badge{display:inline-flex;align-items:center;gap:6px;background:#fff8f0;border:1px solid #ffcfa0;border-radius:8px;padding:8px 12px;font-size:13px;color:var(--svbe-brown);margin-bottom:1rem;}
+  .day-label{font-size:13px;min-width:30px;color:#111;font-weight:500;}
+  .write-in{margin-top:8px;width:100%;padding:8px 10px;border:1px solid #ccc;border-radius:8px;font-size:14px;background:#f9f9f7;color:#111;display:none;}
+  .deadline-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .deadline-row input[type="date"]{padding:8px 10px;border:1px solid #ccc;border-radius:8px;font-size:14px;background:#f9f9f7;color:#111;}
+  .btn-save{padding:8px 14px;background:var(--svbe-dark);color:white;border:none;border-radius:8px;font-size:13px;cursor:pointer;font-weight:500;}
+  .saved-msg{font-size:12px;color:#3b6d11;display:none;}
+  .avail-section{margin-bottom:1.25rem;}
+  .avail-section-title{font-size:13px;font-weight:500;color:#111;margin-bottom:8px;display:flex;align-items:center;gap:8px;}
+  .divider{border-top:1px solid #e5e5e0;margin:1rem 0;}
+  .appt-type-badge{display:inline-block;font-size:11px;font-weight:500;padding:3px 9px;border-radius:20px;margin-bottom:6px;}
+  .badge-60{background:#eaf4e2;color:#1b351b;}
+  .badge-30{background:#fff8f0;color:#854f0b;}
+  .bike-popup-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;z-index:200;opacity:0;transition:opacity 0.25s;pointer-events:none;}
+  .bike-popup-overlay.show{opacity:1;pointer-events:all;}
+  .bike-popup{background:white;border-radius:20px;border:1px solid #e5e5e0;padding:2rem 2rem 1.5rem;width:280px;text-align:center;transform:scale(0.85);transition:transform 0.25s;}
+  .bike-popup-overlay.show .bike-popup{transform:scale(1);}
+  .bike-popup-title{font-size:17px;font-weight:500;color:var(--svbe-dark);margin-bottom:6px;}
+  .bike-popup-sub{font-size:13px;color:#666;margin-bottom:1.25rem;line-height:1.5;}
+  .bike-popup-btn{padding:10px 24px;background:var(--svbe-dark);color:white;border:none;border-radius:8px;font-size:14px;font-weight:500;cursor:pointer;}
+  .loading-bar{text-align:center;padding:2rem;color:#888;font-size:14px;}
+  .pin-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.45);display:none;align-items:center;justify-content:center;z-index:100;}
+  .pin-overlay.show{display:flex;}
+  .pin-modal{background:white;border-radius:16px;border:1px solid #e5e5e0;padding:2rem 2rem 1.5rem;width:300px;text-align:center;}
+  .pin-icon{width:48px;height:48px;background:var(--svbe-sage);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 1rem;}
+  .pin-icon svg{width:24px;height:24px;}
+  .pin-title{font-size:16px;font-weight:500;color:#111;margin-bottom:6px;}
+  .pin-sub{font-size:13px;color:#888;margin-bottom:1.25rem;}
+  .pin-dots{display:flex;justify-content:center;gap:10px;margin-bottom:1.25rem;}
+  .pin-dot{width:14px;height:14px;border-radius:50%;border:1.5px solid #ccc;background:#f5f5f3;transition:all 0.15s;}
+  .pin-dot.filled{background:var(--svbe-dark);border-color:var(--svbe-dark);}
+  .pin-keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px;}
+  .pin-key{padding:12px;border:1px solid #ccc;border-radius:10px;background:#f5f5f3;font-size:18px;font-weight:500;cursor:pointer;color:#111;transition:all 0.1s;}
+  .pin-key:hover{background:white;border-color:var(--svbe-dark);}
+  .pin-key:active{transform:scale(0.95);}
+  .pin-key.del{font-size:14px;color:#888;}
+  .pin-error{font-size:13px;color:#a32d2d;margin-top:6px;min-height:20px;}
+  .pin-cancel{font-size:13px;color:#888;background:none;border:none;cursor:pointer;margin-top:8px;text-decoration:underline;}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <div class="header-left">
+      <div class="header-logo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#1b351b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="5.5" cy="17.5" r="3.5"/><circle cx="18.5" cy="17.5" r="3.5"/>
+          <path d="M15 6a1 1 0 0 0 0-2h-1l-5 8h5l-1 5"/><path d="m9.5 14-2-4"/>
+        </svg>
+      </div>
+      <div>
+        <div class="header-title">BikeX — Bike Pickup Scheduler</div>
+        <div class="header-sub">Palo Alto Bike Equity Program</div>
+      </div>
+    </div>
+    <button class="lock-btn" id="lock-btn" onclick="lockAdmin()">Lock admin</button>
+  </div>
+  <div class="tab-bar">
+    <button class="tab active" id="tab-recipient" onclick="switchTab('recipient')">Recipient Booking</button>
+    <button class="tab admin-tab" id="tab-admin" onclick="switchTab('admin')">Admin / LCI</button>
+    <button class="tab admin-tab" id="tab-hours" onclick="switchTab('hours')">Shop Hours</button>
+    <button class="tab admin-tab" id="tab-bookings" onclick="switchTab('bookings')">View Bookings</button>
+    <button class="tab" id="tab-unlock" onclick="showPinOverlay()">Admin login</button>
+  </div>
+
+  <!-- RECIPIENT -->
+  <div class="panel active" id="panel-recipient">
+    <div id="step-type">
+      <div class="student-notice"><span class="student-notice-icon">⚠️</span><span><strong>Students must be present</strong> at all bike pickup appointments for helmet fitting and a test ride.</span></div>
+      <p class="section-label">choose your appointment type</p>
+      <div class="appt-cards">
+        <div class="appt-card" id="card-60" onclick="selectApptType('60')">
+          <div class="appt-card-icon">🚲</div>
+          <div class="appt-card-duration duration-60">60 minutes</div>
+          <div class="appt-card-title">Bike pickup + free bike education</div>
+          <div class="appt-card-desc">Bike, helmet, lock &amp; light pickup with a bike education and safety activity.</div>
+          <div class="appt-card-rec">★ Highly recommended</div>
+        </div>
+        <div class="appt-card" id="card-30" onclick="selectApptType('30')">
+          <div class="appt-card-icon">⏱️</div>
+          <div class="appt-card-duration duration-30">30 minutes</div>
+          <div class="appt-card-title">Bike pickup only</div>
+          <div class="appt-card-desc">Bike, helmet, lock &amp; light pickup with helmet fitting and student test ride.</div>
+        </div>
+      </div>
+      <button class="btn-confirm" id="btn-next-type" onclick="goToSlots()" disabled style="max-width:200px;margin:0 auto;display:block;">See available times</button>
+    </div>
+    <div id="step-slots" style="display:none;">
+      <button class="btn-back" onclick="goBack()">← Change appointment type</button>
+      <div class="student-notice"><span class="student-notice-icon">⚠️</span><span><strong>Students must be present</strong> at all bike pickup appointments for helmet fitting and a test ride.</span></div>
+      <div id="appt-type-reminder" style="margin-bottom:1rem;"></div>
+      <p class="section-label">available pickup times</p>
+      <div id="booking-slots"><div class="loading-bar">Loading available times...</div></div>
+      <div class="card" id="recipient-form" style="display:none;margin-top:1rem;">
+        <p class="section-label" style="margin-bottom:1rem;">your information</p>
+        <div class="form-group"><label>Full name</label><input type="text" id="rec-name" placeholder="Your name" oninput="updateConfirmBtn()"/></div>
+        <div class="form-group"><label>Phone number</label><input type="text" id="rec-phone" placeholder="(555) 000-0000" oninput="updateConfirmBtn()"/></div>
+        <div class="form-group"><label>Email (optional)</label><input type="text" id="rec-email" placeholder="you@email.com"/></div>
+        <button class="btn-confirm" id="btn-confirm" onclick="confirmBooking()" disabled>Confirm my pickup</button>
+      </div>
+    </div>
+    <div id="booking-success" style="display:none;" class="success-box">
+      <div style="font-size:40px;margin-bottom:10px;">🚲</div>
+      <div class="success-title">You're booked!</div>
+      <div class="success-detail" id="success-detail"></div>
+      <button class="btn-back" style="margin-top:1rem;display:block;" onclick="resetRecipient()">Book another appointment</button>
+    </div>
+  </div>
+
+  <!-- ADMIN -->
+  <div class="panel" id="panel-admin">
+    <div class="cutoff-badge" id="cutoff-badge-admin">Slots cannot be added after June 4, 2026</div>
+    <div class="info-box">Each person enters their own availability. The app automatically finds overlapping windows for 60-min bookings and offers 30-min slots from any SVBE Staff availability.</div>
+    <div class="card">
+      <p class="section-label" style="margin-bottom:12px;">add availability</p>
+      <div class="avail-section">
+        <div class="avail-section-title"><span class="person-tag tag-svbe">SVBE Staff</span><span style="font-size:12px;color:#888;">Kelly</span></div>
+        <div class="slot-row"><input type="date" id="svbe-date" onchange="onDateChange('svbe')"/><input type="time" id="svbe-start" value="10:00"/><input type="time" id="svbe-end" value="17:00"/></div>
+        <div class="slot-row"><select id="svbe-location" onchange="onLocationChange('svbe')" style="flex:2;"><option value="">Select a location...</option><option value="SVBE Shop: 3961 E. Bayshore Rd., Palo Alto, CA 94303">SVBE Shop — 3961 E. Bayshore Rd., Palo Alto</option><option value="Palo Alto Bicycle Safety Park">Palo Alto Bicycle Safety Park</option><option value="other">Other (write in)...</option></select></div>
+        <input type="text" id="svbe-location-wi" class="write-in" placeholder="Enter location..."/>
+        <div class="error-msg" id="svbe-error"></div>
+        <button class="btn-add" onclick="addAvail('svbe')" style="margin-top:8px;">+ Add SVBE availability</button>
+      </div>
+      <div class="divider"></div>
+      <div class="avail-section">
+        <div class="avail-section-title"><span class="person-tag tag-tim">Tim</span><span style="font-size:12px;color:#888;">English</span></div>
+        <div class="slot-row"><input type="date" id="tim-date" onchange="onDateChange('tim')"/><input type="time" id="tim-start" value="10:00"/><input type="time" id="tim-end" value="17:00"/></div>
+        <div class="slot-row"><select id="tim-location" onchange="onLocationChange('tim')" style="flex:2;"><option value="">Select a location...</option><option value="SVBE Shop: 3961 E. Bayshore Rd., Palo Alto, CA 94303">SVBE Shop — 3961 E. Bayshore Rd., Palo Alto</option><option value="Palo Alto Bicycle Safety Park">Palo Alto Bicycle Safety Park</option><option value="other">Other (write in)...</option></select></div>
+        <input type="text" id="tim-location-wi" class="write-in" placeholder="Enter location..."/>
+        <div class="error-msg" id="tim-error"></div>
+        <button class="btn-add" onclick="addAvail('tim')" style="margin-top:8px;">+ Add Tim's availability</button>
+      </div>
+      <div class="divider"></div>
+      <div class="avail-section">
+        <div class="avail-section-title"><span class="person-tag tag-julie">Julie</span><span style="font-size:12px;color:#888;">English &amp; Spanish</span></div>
+        <div class="slot-row"><input type="date" id="julie-date" onchange="onDateChange('julie')"/><input type="time" id="julie-start" value="10:00"/><input type="time" id="julie-end" value="17:00"/></div>
+        <div class="slot-row"><select id="julie-location" onchange="onLocationChange('julie')" style="flex:2;"><option value="">Select a location...</option><option value="SVBE Shop: 3961 E. Bayshore Rd., Palo Alto, CA 94303">SVBE Shop — 3961 E. Bayshore Rd., Palo Alto</option><option value="Palo Alto Bicycle Safety Park">Palo Alto Bicycle Safety Park</option><option value="other">Other (write in)...</option></select></div>
+        <input type="text" id="julie-location-wi" class="write-in" placeholder="Enter location..."/>
+        <div class="error-msg" id="julie-error"></div>
+        <button class="btn-add" onclick="addAvail('julie')" style="margin-top:8px;">+ Add Julie's availability</button>
+      </div>
+    </div>
+    <p class="section-label">all availability entries</p>
+    <div class="slot-list" id="admin-slot-list"><div class="loading-bar">Loading...</div></div>
+  </div>
+
+  <!-- SHOP HOURS -->
+  <div class="panel" id="panel-hours">
+    <div class="info-box">Set the days and hours the shop is open. Availability cannot be added outside these hours.</div>
+    <div class="card"><p class="section-label" style="margin-bottom:14px;">weekly open hours</p><div id="hours-list"></div></div>
+    <div class="card">
+      <p class="section-label" style="margin-bottom:12px;">program end date</p>
+      <div class="deadline-row"><input type="date" id="deadline-input" value="2026-06-04"/><button class="btn-save" onclick="saveSettings()">Save</button><span class="saved-msg" id="saved-msg">Saved!</span></div>
+      <p style="font-size:12px;color:#888;margin-top:8px;">Availability and bookings cannot be entered after this date.</p>
+    </div>
+  </div>
+
+  <!-- BOOKINGS -->
+  <div class="panel" id="panel-bookings">
+    <p class="section-label">confirmed bookings</p>
+    <div class="card" style="overflow-x:auto;">
+      <table class="bookings-table"><thead><tr><th>Type</th><th>Date / Time</th><th>Recipient</th><th>Phone</th><th>Location</th><th>LCI</th></tr></thead><tbody id="bookings-tbody"></tbody></table>
+      <div class="empty-state" id="no-bookings">No bookings yet.</div>
+    </div>
+  </div>
+</div>
+
+<!-- BIKE POPUP -->
+<div class="bike-popup-overlay" id="bike-popup-overlay">
+  <div class="bike-popup">
+    <div style="margin:0 auto 12px;">
+      <svg width="80" height="56" viewBox="0 0 80 56" fill="none">
+        <circle cx="16" cy="40" r="12" stroke="#1b351b" stroke-width="2.5" fill="#bedba5"/><circle cx="64" cy="40" r="12" stroke="#1b351b" stroke-width="2.5" fill="#bedba5"/>
+        <circle cx="16" cy="40" r="4" fill="#1b351b"/><circle cx="64" cy="40" r="4" fill="#1b351b"/>
+        <path d="M16 40 L32 16 L48 16 L64 40" stroke="#1b351b" stroke-width="2.5" stroke-linejoin="round" fill="none"/>
+        <path d="M32 16 L40 40" stroke="#1b351b" stroke-width="2.5"/>
+        <path d="M26 16 L38 16" stroke="#1b351b" stroke-width="2.5" stroke-linecap="round"/>
+        <path d="M56 28 L64 40" stroke="#1b351b" stroke-width="2.5"/>
+        <circle cx="56" cy="26" r="3" fill="#ff914d"/>
+        <path d="M52 18 L60 18" stroke="#1b351b" stroke-width="2.5" stroke-linecap="round"/>
+      </svg>
+    </div>
+    <div class="bike-popup-title">Availability added!</div>
+    <div class="bike-popup-sub" id="bike-popup-sub">Saved to Google Sheets.</div>
+    <button class="bike-popup-btn" onclick="closeBikePopup()">Great!</button>
+  </div>
+</div>
+
+<!-- PIN -->
+<div class="pin-overlay" id="pin-overlay">
+  <div class="pin-modal">
+    <div class="pin-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#1b351b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
+    <div class="pin-title">Admin access</div>
+    <div class="pin-sub">Enter your PIN to continue</div>
+    <div class="pin-dots"><div class="pin-dot" id="dot-0"></div><div class="pin-dot" id="dot-1"></div><div class="pin-dot" id="dot-2"></div><div class="pin-dot" id="dot-3"></div></div>
+    <div class="pin-keypad">
+      <button class="pin-key" onclick="pinKey('1')">1</button><button class="pin-key" onclick="pinKey('2')">2</button><button class="pin-key" onclick="pinKey('3')">3</button>
+      <button class="pin-key" onclick="pinKey('4')">4</button><button class="pin-key" onclick="pinKey('5')">5</button><button class="pin-key" onclick="pinKey('6')">6</button>
+      <button class="pin-key" onclick="pinKey('7')">7</button><button class="pin-key" onclick="pinKey('8')">8</button><button class="pin-key" onclick="pinKey('9')">9</button>
+      <div></div><button class="pin-key" onclick="pinKey('0')">0</button><button class="pin-key del" onclick="pinDel()">⌫</button>
+    </div>
+    <div class="pin-error" id="pin-error"></div>
+    <button class="pin-cancel" onclick="hidePinOverlay()">Cancel</button>
+  </div>
+</div>
+
+<script>
+const API = 'https://script.google.com/macros/s/AKfycbzZNPHsbaFv_PaRXgT6Tqqr7YZ8CbFLqI9zj70QNE2F97COpzkJKGku-0Cf5-Uiq66o/exec';
+const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const CORRECT_PIN = '1993';
+
+let programEnd = '2026-06-04';
+let shopHours = [
+  {day:0,open:false,start:'10:00',end:'17:00'},
+  {day:1,open:true,start:'10:00',end:'17:00'},
+  {day:2,open:true,start:'10:00',end:'17:00'},
+  {day:3,open:true,start:'10:00',end:'17:00'},
+  {day:4,open:true,start:'10:00',end:'17:00'},
+  {day:5,open:true,start:'10:00',end:'17:00'},
+  {day:6,open:true,start:'10:00',end:'15:00'}
+];
+let avails = [], bookings = [];
+let selectedApptType = null, selectedOverlapId = null, selectedLCI = {};
+let pinEntry = '';
+
+// --- API CALLS ---
+async function api(params) {
+  const url = API + '?' + new URLSearchParams(params).toString();
+  const res = await fetch(url);
+  return res.json();
+}
+
+async function loadAll() {
+  try {
+    const data = await api({action:'getAll'});
+    avails = (data.avails || []).map(a => ({...a, id: a.id}));
+    bookings = data.bookings || [];
+  } catch(e) { console.error('Load error', e); }
+}
+
+async function loadSettings() {
+  try {
+    const s = await api({action:'getSettings'});
+    if (s.programEnd) programEnd = s.programEnd;
+    if (s.shopHours) shopHours = typeof s.shopHours === 'string' ? JSON.parse(s.shopHours) : s.shopHours;
+    document.getElementById('deadline-input').value = programEnd;
+    updateCutoffBadge();
+  } catch(e) { console.error('Settings error', e); }
+}
+
+async function saveSettings() {
+  const v = document.getElementById('deadline-input').value;
+  if (!v) return;
+  programEnd = v;
+  updateCutoffBadge();
+  try {
+    await api({action:'saveSettings', programEnd, shopHours: JSON.stringify(shopHours)});
+    const msg = document.getElementById('saved-msg');
+    msg.style.display = 'inline';
+    setTimeout(() => msg.style.display='none', 2000);
+  } catch(e) { alert('Error saving settings.'); }
+}
+
+// --- HELPERS ---
+function fmtDateDisplay(d){if(!d)return'';const[y,mo,day]=d.split('-');const M=['January','February','March','April','May','June','July','August','September','October','November','December'];return`${M[+mo-1]} ${+day}, ${y}`;}
+function fmtDate(d){if(!d)return'';const[y,m,day]=d.split('-');return new Date(+y,+m-1,+day).toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'});}
+function fmtTime(t){if(!t)return'';const[h,m]=t.split(':');const hr=+h,ap=hr>=12?'PM':'AM';return((hr%12)||12)+(m!=='00'?':'+m:'')+' '+ap;}
+function timeToMins(t){const[h,m]=t.split(':');return+h*60+ +m;}
+function minsToTime(m){const h=Math.floor(m/60),mn=m%60;return`${String(h).padStart(2,'0')}:${String(mn).padStart(2,'0')}`;}
+function getDOW(ds){const[y,mo,d]=ds.split('-');return new Date(+y,+mo-1,+d).getDay();}
+function getShopH(ds){return shopHours[getDOW(ds)];}
+function updateCutoffBadge(){document.getElementById('cutoff-badge-admin').textContent=`Slots cannot be added after ${fmtDateDisplay(programEnd)}`;}
+
+function onLocationChange(who){const v=document.getElementById(who+'-location').value;const wi=document.getElementById(who+'-location-wi');if(wi)wi.style.display=v==='other'?'block':'none';}
+function getLocation(who){const sel=document.getElementById(who+'-location');if(!sel||!sel.value)return null;if(sel.value==='other')return(document.getElementById(who+'-location-wi').value||'').trim();return sel.value;}
+
+function validateAvail(who,dateStr,start,end){
+  if(!dateStr||!start||!end)return{ok:false,msg:'Please fill in date, start, and end time.'};
+  if(dateStr>programEnd)return{ok:false,msg:`Date is after program end (${fmtDateDisplay(programEnd)}).`};
+  const h=getShopH(dateStr);if(!h.open)return{ok:false,msg:`Shop is closed on ${DAYS[h.day]}s.`};
+  const ss=timeToMins(start),se=timeToMins(end);
+  if(se<=ss)return{ok:false,msg:'End time must be after start time.'};
+  if(ss<timeToMins(h.start))return{ok:false,msg:`Shop opens at ${fmtTime(h.start)} on ${DAYS[h.day]}s.`};
+  if(se>timeToMins(h.end))return{ok:false,msg:`Shop closes at ${fmtTime(h.end)} on ${DAYS[h.day]}s.`};
+  return{ok:true};
+}
+
+function onDateChange(who){
+  const date=document.getElementById(who+'-date').value;if(!date)return;
+  if(date>programEnd){showErr(who,'Date is after program end.');return;}
+  const h=getShopH(date);
+  if(!h.open)showErr(who,`Shop is closed on ${DAYS[h.day]}s.`);
+  else{hideErr(who);document.getElementById(who+'-start').value=h.start;document.getElementById(who+'-end').value=h.end;}
+}
+function showErr(who,msg){const el=document.getElementById(who+'-error');el.textContent=msg;el.style.display='block';}
+function hideErr(who){document.getElementById(who+'-error').style.display='none';}
+
+async function addAvail(who) {
+  const date=document.getElementById(who+'-date').value;
+  const start=document.getElementById(who+'-start').value;
+  const end=document.getElementById(who+'-end').value;
+  const r=validateAvail(who,date,start,end);
+  if(!r.ok){showErr(who,r.msg);return;}
+  const loc=getLocation(who);
+  if(!loc){showErr(who,'Please select a location.');return;}
+  try {
+    const res = await api({action:'addAvail', person:who, date, start, end, location:loc});
+    if(res.success) {
+      avails.push({id:res.id, person:who, date, start, end, location:loc});
+      avails.sort((a,b)=>(a.date+a.start).localeCompare(b.date+b.start));
+      hideErr(who);
+      document.getElementById(who+'-date').value='';
+      document.getElementById(who+'-location').value='';
+      const wi=document.getElementById(who+'-location-wi');if(wi){wi.style.display='none';wi.value='';}
+      renderAdminSlots();
+      showBikePopup(who);
+    }
+  } catch(e) { showErr(who, 'Error saving. Please try again.'); }
+}
+
+async function removeAvail(id) {
+  try {
+    await api({action:'removeAvail', id});
+    avails = avails.filter(a => a.id != id);
+    renderAdminSlots();
+  } catch(e) { alert('Error removing slot.'); }
+}
+
+function showBikePopup(who){
+  const label=who==='svbe'?'SVBE Staff':who==='tim'?'Tim':'Julie';
+  document.getElementById('bike-popup-sub').textContent=`${label}'s availability saved to Google Sheets!`;
+  const o=document.getElementById('bike-popup-overlay');
+  o.style.display='flex';
+  requestAnimationFrame(()=>requestAnimationFrame(()=>o.classList.add('show')));
+}
+function closeBikePopup(){const o=document.getElementById('bike-popup-overlay');o.classList.remove('show');setTimeout(()=>o.style.display='none',250);}
+
+function renderAdminSlots(){
+  const el=document.getElementById('admin-slot-list');
+  if(!avails.length){el.innerHTML='<div class="empty-state">No availability entered yet.</div>';return;}
+  el.innerHTML=avails.map(a=>{
+    const tc=a.person==='svbe'?'tag-svbe':a.person==='tim'?'tag-tim':'tag-julie';
+    const lb=a.person==='svbe'?'SVBE Staff':a.person==='tim'?'Tim':'Julie';
+    return`<div class="slot-item"><div class="slot-meta"><div>${fmtDate(a.date)} · ${fmtTime(a.start)}–${fmtTime(a.end)}</div><div class="slot-meta-sub"><span class="person-tag ${tc}">${lb}</span> · ${a.location}</div></div><button class="btn-remove" onclick="removeAvail('${a.id}')">✕</button></div>`;
+  }).join('');
+}
+
+// --- OVERLAP ENGINE ---
+function compute60MinOverlaps(){
+  const dates=[...new Set(avails.map(a=>a.date))];const results=[];
+  dates.forEach(date=>{
+    const svbeB=avails.filter(a=>a.person==='svbe'&&a.date===date);
+    const timB=avails.filter(a=>a.person==='tim'&&a.date===date);
+    const julieB=avails.filter(a=>a.person==='julie'&&a.date===date);
+    svbeB.forEach(svbe=>{
+      const ss=timeToMins(svbe.start),se=timeToMins(svbe.end);
+      const tW=timB.map(t=>{const os=Math.max(ss,timeToMins(t.start)),oe=Math.min(se,timeToMins(t.end));return os<oe&&t.location===svbe.location?{start:os,end:oe,who:'tim'}:null;}).filter(Boolean);
+      const jW=julieB.map(j=>{const os=Math.max(ss,timeToMins(j.start)),oe=Math.min(se,timeToMins(j.end));return os<oe&&j.location===svbe.location?{start:os,end:oe,who:'julie'}:null;}).filter(Boolean);
+      const allW=[];[...tW,...jW].forEach(w=>{const ex=allW.find(x=>x.start===w.start&&x.end===w.end);if(ex){if(!ex.lcis.includes(w.who))ex.lcis.push(w.who);}else allW.push({start:w.start,end:w.end,lcis:[w.who]});});
+      allW.forEach(w=>{
+        const id=`60-${date}-${w.start}-${w.end}-${svbe.id}`;
+        const booked=bookings.find(b=>b.overlapId===id);
+        results.push({id,date,start:minsToTime(w.start),end:minsToTime(w.end),location:svbe.location,lcis:w.lcis,booked:!!booked,type:'60'});
+      });
+    });
+  });
+  return results;
+}
+
+function compute30MinSlots(){
+  return avails.filter(a=>a.person==='svbe').map(svbe=>{
+    const id=`30-${svbe.date}-${svbe.id}`;
+    const booked=bookings.find(b=>b.overlapId===id);
+    return{id,date:svbe.date,start:svbe.start,end:svbe.end,location:svbe.location,lcis:[],booked:!!booked,type:'30'};
+  });
+}
+
+// --- RECIPIENT FLOW ---
+function selectApptType(type){
+  selectedApptType=type;
+  document.getElementById('card-60').classList.toggle('selected',type==='60');
+  document.getElementById('card-30').classList.toggle('selected',type==='30');
+  document.getElementById('btn-next-type').disabled=false;
+}
+
+async function goToSlots(){
+  if(!selectedApptType)return;
+  document.getElementById('step-type').style.display='none';
+  document.getElementById('step-slots').style.display='block';
+  document.getElementById('booking-success').style.display='none';
+  document.getElementById('appt-type-reminder').innerHTML=selectedApptType==='60'?`<span class="appt-type-badge badge-60">60-min · Bike pickup + free bike education</span>`:`<span class="appt-type-badge badge-30">30-min · Bike pickup only</span>`;
+  document.getElementById('booking-slots').innerHTML='<div class="loading-bar">Loading available times...</div>';
+  selectedOverlapId=null;selectedLCI={};
+  await loadAll();
+  renderRecipientSlots();
+}
+
+function goBack(){document.getElementById('step-type').style.display='block';document.getElementById('step-slots').style.display='none';document.getElementById('recipient-form').style.display='none';selectedOverlapId=null;}
+
+function resetRecipient(){selectedApptType=null;selectedOverlapId=null;selectedLCI={};document.getElementById('card-60').classList.remove('selected');document.getElementById('card-30').classList.remove('selected');document.getElementById('btn-next-type').disabled=true;document.getElementById('step-type').style.display='block';document.getElementById('step-slots').style.display='none';document.getElementById('booking-success').style.display='none';['rec-name','rec-phone','rec-email'].forEach(id=>document.getElementById(id).value='');}
+
+function renderRecipientSlots(){
+  const el=document.getElementById('booking-slots');
+  const slots=(selectedApptType==='60'?compute60MinOverlaps():compute30MinSlots()).filter(o=>!o.booked);
+  if(!slots.length){el.innerHTML='<div class="empty-state" style="padding:2rem 0;">No pickup times available right now.<br>Please check back soon or contact BikeX at info@bikex.org.</div>';document.getElementById('recipient-form').style.display='none';return;}
+  el.innerHTML=slots.map(o=>{
+    const both=o.lcis.includes('tim')&&o.lcis.includes('julie');
+    const lciLine=o.type==='60'&&!both?`<div style="font-size:12px;color:#666;margin-top:4px;">Instructor: ${o.lcis[0]==='tim'?'Tim (English)':'Julie (English & Spanish)'}</div>`:'';
+    const drop=both&&o.type==='60'?`<div class="lci-select-wrap visible"><label>Choose your preferred instructor:</label><select onchange="selectLCI('${o.id}',this.value)"><option value="">Select...</option><option value="tim">Tim (English)</option><option value="julie">Julie (English & Spanish)</option></select></div>`:'';
+    return`<div class="book-slot ${selectedOverlapId===o.id?'selected':''}" onclick="selectOverlap('${o.id}')"><div class="book-slot-date">${fmtDate(o.date)} · ${fmtTime(o.start)}–${fmtTime(o.end)}</div><div class="book-slot-details">${o.location}</div>${lciLine}${drop}</div>`;
+  }).join('');
+  document.getElementById('recipient-form').style.display=selectedOverlapId?'block':'none';
+  updateConfirmBtn();
+}
+
+function selectOverlap(id){selectedOverlapId=id;renderRecipientSlots();}
+function selectLCI(oid,val){selectedLCI[oid]=val;updateConfirmBtn();}
+
+function updateConfirmBtn(){
+  const name=document.getElementById('rec-name').value.trim(),phone=document.getElementById('rec-phone').value.trim();
+  if(!selectedOverlapId||!name||!phone){document.getElementById('btn-confirm').disabled=true;return;}
+  if(selectedApptType==='60'){
+    const o=compute60MinOverlaps().find(x=>x.id===selectedOverlapId);
+    if(!o){document.getElementById('btn-confirm').disabled=true;return;}
+    const both=o.lcis.includes('tim')&&o.lcis.includes('julie');
+    document.getElementById('btn-confirm').disabled=both?!selectedLCI[selectedOverlapId]:false;
+  } else {document.getElementById('btn-confirm').disabled=false;}
+}
+
+async function confirmBooking(){
+  const slot=(selectedApptType==='60'?compute60MinOverlaps():compute30MinSlots()).find(o=>o.id===selectedOverlapId);
+  if(!slot)return;
+  const name=document.getElementById('rec-name').value.trim(),phone=document.getElementById('rec-phone').value.trim(),email=document.getElementById('rec-email').value.trim();
+  let lci='';
+  if(selectedApptType==='60'){const both=slot.lcis.includes('tim')&&slot.lcis.includes('julie');lci=both?(selectedLCI[selectedOverlapId]||''):slot.lcis[0];}
+  const lciLabel=lci==='tim'?'Tim':lci==='julie'?'Julie':'';
+  document.getElementById('btn-confirm').disabled=true;
+  document.getElementById('btn-confirm').textContent='Saving...';
+  try {
+    await api({action:'addBooking', overlapId:slot.id, date:slot.date, start:slot.start, end:slot.end, location:slot.location, lci, name, phone, email, type:selectedApptType});
+    bookings.push({overlapId:slot.id});
+    document.getElementById('step-slots').style.display='none';
+    document.getElementById('booking-success').style.display='block';
+    const tl=selectedApptType==='60'?'60-min bike pickup + free bike education':'30-min bike pickup';
+    document.getElementById('success-detail').innerHTML=`<strong>${tl}</strong><br>${fmtDate(slot.date)} · ${fmtTime(slot.start)}–${fmtTime(slot.end)}<br>${slot.location}${lciLabel?`<br>Instructor: ${lciLabel}`:''}.<br><br><strong>Remember:</strong> Students must be present for helmet fitting and test ride.`;
+    selectedOverlapId=null;selectedLCI={};
+    ['rec-name','rec-phone','rec-email'].forEach(id=>document.getElementById(id).value='');
+  } catch(e) {
+    alert('Error confirming booking. Please try again.');
+    document.getElementById('btn-confirm').disabled=false;
+    document.getElementById('btn-confirm').textContent='Confirm my pickup';
+  }
+}
+
+// --- BOOKINGS VIEW ---
+async function renderBookings(){
+  await loadAll();
+  const tbody=document.getElementById('bookings-tbody');
+  const empty=document.getElementById('no-bookings');
+  if(!bookings.length){tbody.innerHTML='';empty.style.display='block';return;}
+  empty.style.display='none';
+  tbody.innerHTML=bookings.map(b=>`<tr><td><span class="appt-type-badge ${b.type==='60'?'badge-60':'badge-30'}">${b.type==='60'?'60 min':'30 min'}</span></td><td>${fmtDate(b.date)}<br><span style="color:#888;font-size:12px;">${fmtTime(b.start)}–${fmtTime(b.end)}</span></td><td>${b.name}</td><td>${b.phone}${b.email?'<br><span style="color:#888;font-size:11px;">'+b.email+'</span>':''}</td><td style="font-size:12px;">${b.location}</td><td>${b.lci?`<span class="person-tag ${b.lci==='tim'?'tag-tim':'tag-julie'}">${b.lci==='tim'?'Tim':'Julie'}</span>`:'—'}</td></tr>`).join('');
+}
+
+// --- HOURS ---
+function renderHours(){
+  const el=document.getElementById('hours-list');
+  el.innerHTML=shopHours.map((h,i)=>`<div class="hours-row ${h.open?'':'closed'}" style="margin-bottom:8px;"><span class="day-label">${DAYS[i]}</span><label class="toggle"><input type="checkbox" ${h.open?'checked':''} onchange="toggleDay(${i},this.checked)"/><span class="slider"></span></label><input type="time" value="${h.start}" ${h.open?'':'disabled'} onchange="updateHour(${i},'start',this.value)" style="width:90px;flex:none;"/><span style="font-size:12px;color:#888;">to</span><input type="time" value="${h.end}" ${h.open?'':'disabled'} onchange="updateHour(${i},'end',this.value)" style="width:90px;flex:none;"/><span style="font-size:12px;color:#888;">${h.open?'':'Closed'}</span></div>`).join('');
+}
+function toggleDay(i,c){shopHours[i].open=c;renderHours();}
+function updateHour(i,f,v){shopHours[i][f]=v;}
+
+// --- PIN ---
+function showPinOverlay(){pinEntry='';updatePinDots();document.getElementById('pin-error').textContent='';document.getElementById('pin-overlay').classList.add('show');}
+function hidePinOverlay(){document.getElementById('pin-overlay').classList.remove('show');}
+function pinKey(k){
+  if(pinEntry.length>=4)return;pinEntry+=k;updatePinDots();
+  if(pinEntry.length===4){setTimeout(async()=>{
+    if(pinEntry===CORRECT_PIN){hidePinOverlay();showAdminTabs();await loadAll();renderAdminSlots();switchTab('admin');}
+    else{document.getElementById('pin-error').textContent='Incorrect PIN. Try again.';pinEntry='';updatePinDots();}
+  },150);}
+}
+function pinDel(){pinEntry=pinEntry.slice(0,-1);updatePinDots();document.getElementById('pin-error').textContent='';}
+function updatePinDots(){for(let i=0;i<4;i++)document.getElementById('dot-'+i).classList.toggle('filled',i<pinEntry.length);}
+function showAdminTabs(){document.querySelectorAll('.admin-tab').forEach(t=>t.style.display='block');document.getElementById('tab-unlock').style.display='none';document.getElementById('lock-btn').style.display='block';}
+function lockAdmin(){document.querySelectorAll('.admin-tab').forEach(t=>t.style.display='none');document.getElementById('tab-unlock').style.display='block';document.getElementById('lock-btn').style.display='none';switchTab('recipient');}
+
+function switchTab(tab){
+  ['recipient','admin','hours','bookings'].forEach(t=>{
+    const tb=document.getElementById('tab-'+t),pn=document.getElementById('panel-'+t);
+    if(tb)tb.classList.toggle('active',t===tab);if(pn)pn.classList.toggle('active',t===tab);
+  });
+  if(tab==='admin')renderAdminSlots();
+  if(tab==='hours'){loadSettings().then(()=>renderHours());}
+  if(tab==='bookings')renderBookings();
+}
+
+// --- INIT ---
+updateCutoffBadge();
+loadSettings();
+</script>
+</body>
+</html>
