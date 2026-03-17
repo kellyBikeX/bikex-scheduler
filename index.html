@@ -154,7 +154,6 @@
     <button class="tab" id="tab-unlock" onclick="showPinOverlay()">Admin login</button>
   </div>
 
-  <!-- RECIPIENT -->
   <div class="panel active" id="panel-recipient">
     <div id="step-type">
       <div class="student-notice"><span class="student-notice-icon">⚠️</span><span><strong>Students must be present</strong> at all bike pickup appointments for helmet fitting and a test ride.</span></div>
@@ -198,7 +197,6 @@
     </div>
   </div>
 
-  <!-- ADMIN -->
   <div class="panel" id="panel-admin">
     <div class="cutoff-badge" id="cutoff-badge-admin">Slots cannot be added after June 4, 2026</div>
     <div class="info-box">Each person enters their own availability. The app automatically finds overlapping windows for 60-min bookings and offers 30-min slots from any SVBE Staff availability.</div>
@@ -235,7 +233,6 @@
     <div class="slot-list" id="admin-slot-list"><div class="loading-bar">Loading...</div></div>
   </div>
 
-  <!-- SHOP HOURS -->
   <div class="panel" id="panel-hours">
     <div class="info-box">Set the days and hours the shop is open. Availability cannot be added outside these hours.</div>
     <div class="card"><p class="section-label" style="margin-bottom:14px;">weekly open hours</p><div id="hours-list"></div></div>
@@ -246,7 +243,6 @@
     </div>
   </div>
 
-  <!-- BOOKINGS -->
   <div class="panel" id="panel-bookings">
     <p class="section-label">confirmed bookings</p>
     <div class="card" style="overflow-x:auto;">
@@ -256,7 +252,6 @@
   </div>
 </div>
 
-<!-- BIKE POPUP -->
 <div class="bike-popup-overlay" id="bike-popup-overlay">
   <div class="bike-popup">
     <div style="margin:0 auto 12px;">
@@ -277,7 +272,6 @@
   </div>
 </div>
 
-<!-- PIN -->
 <div class="pin-overlay" id="pin-overlay">
   <div class="pin-modal">
     <div class="pin-icon"><svg viewBox="0 0 24 24" fill="none" stroke="#1b351b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
@@ -299,60 +293,46 @@
 const API = 'https://script.google.com/macros/s/AKfycbzZNPHsbaFv_PaRXgT6Tqqr7YZ8CbFLqI9zj70QNE2F97COpzkJKGku-0Cf5-Uiq66o/exec';
 const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const CORRECT_PIN = '1993';
-
 let programEnd = '2026-06-04';
-let shopHours = [
-  {day:0,open:false,start:'10:00',end:'17:00'},
-  {day:1,open:true,start:'10:00',end:'17:00'},
-  {day:2,open:true,start:'10:00',end:'17:00'},
-  {day:3,open:true,start:'10:00',end:'17:00'},
-  {day:4,open:true,start:'10:00',end:'17:00'},
-  {day:5,open:true,start:'10:00',end:'17:00'},
-  {day:6,open:true,start:'10:00',end:'15:00'}
-];
-let avails = [], bookings = [];
-let selectedApptType = null, selectedOverlapId = null, selectedLCI = {};
-let pinEntry = '';
+let shopHours = [{day:0,open:false,start:'10:00',end:'17:00'},{day:1,open:true,start:'10:00',end:'17:00'},{day:2,open:true,start:'10:00',end:'17:00'},{day:3,open:true,start:'10:00',end:'17:00'},{day:4,open:true,start:'10:00',end:'17:00'},{day:5,open:true,start:'10:00',end:'17:00'},{day:6,open:true,start:'10:00',end:'15:00'}];
+let avails=[],bookings=[],selectedApptType=null,selectedOverlapId=null,selectedLCI={},pinEntry='';
 
-// --- API CALLS ---
-async function api(params) {
-  const url = API + '?' + new URLSearchParams(params).toString();
-  const res = await fetch(url);
-  return res.json();
+function api(params){
+  return new Promise((resolve,reject)=>{
+    const cbName='cb_'+Date.now()+'_'+Math.floor(Math.random()*10000);
+    window[cbName]=function(data){resolve(data);delete window[cbName];const s=document.getElementById(cbName);if(s)s.remove();};
+    const script=document.createElement('script');
+    script.id=cbName;
+    script.onerror=()=>{reject(new Error('API error'));delete window[cbName];script.remove();};
+    script.src=API+'?'+new URLSearchParams({...params,callback:cbName}).toString();
+    document.body.appendChild(script);
+  });
 }
 
-async function loadAll() {
-  try {
-    const data = await api({action:'getAll'});
-    avails = (data.avails || []).map(a => ({...a, id: a.id}));
-    bookings = data.bookings || [];
-  } catch(e) { console.error('Load error', e); }
+async function loadAll(){
+  try{const data=await api({action:'getAll'});avails=(data.avails||[]);bookings=data.bookings||[];}
+  catch(e){console.error('Load error',e);}
 }
 
-async function loadSettings() {
-  try {
-    const s = await api({action:'getSettings'});
-    if (s.programEnd) programEnd = s.programEnd;
-    if (s.shopHours) shopHours = typeof s.shopHours === 'string' ? JSON.parse(s.shopHours) : s.shopHours;
-    document.getElementById('deadline-input').value = programEnd;
+async function loadSettings(){
+  try{
+    const s=await api({action:'getSettings'});
+    if(s.programEnd)programEnd=s.programEnd;
+    if(s.shopHours)shopHours=typeof s.shopHours==='string'?JSON.parse(s.shopHours):s.shopHours;
+    document.getElementById('deadline-input').value=programEnd;
     updateCutoffBadge();
-  } catch(e) { console.error('Settings error', e); }
+  }catch(e){console.error('Settings error',e);}
 }
 
-async function saveSettings() {
-  const v = document.getElementById('deadline-input').value;
-  if (!v) return;
-  programEnd = v;
-  updateCutoffBadge();
-  try {
-    await api({action:'saveSettings', programEnd, shopHours: JSON.stringify(shopHours)});
-    const msg = document.getElementById('saved-msg');
-    msg.style.display = 'inline';
-    setTimeout(() => msg.style.display='none', 2000);
-  } catch(e) { alert('Error saving settings.'); }
+async function saveSettings(){
+  const v=document.getElementById('deadline-input').value;if(!v)return;
+  programEnd=v;updateCutoffBadge();
+  try{
+    await api({action:'saveSettings',programEnd,shopHours:JSON.stringify(shopHours)});
+    const msg=document.getElementById('saved-msg');msg.style.display='inline';setTimeout(()=>msg.style.display='none',2000);
+  }catch(e){alert('Error saving settings.');}
 }
 
-// --- HELPERS ---
 function fmtDateDisplay(d){if(!d)return'';const[y,mo,day]=d.split('-');const M=['January','February','March','April','May','June','July','August','September','October','November','December'];return`${M[+mo-1]} ${+day}, ${y}`;}
 function fmtDate(d){if(!d)return'';const[y,m,day]=d.split('-');return new Date(+y,+m-1,+day).toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'});}
 function fmtTime(t){if(!t)return'';const[h,m]=t.split(':');const hr=+h,ap=hr>=12?'PM':'AM';return((hr%12)||12)+(m!=='00'?':'+m:'')+' '+ap;}
@@ -386,42 +366,32 @@ function onDateChange(who){
 function showErr(who,msg){const el=document.getElementById(who+'-error');el.textContent=msg;el.style.display='block';}
 function hideErr(who){document.getElementById(who+'-error').style.display='none';}
 
-async function addAvail(who) {
-  const date=document.getElementById(who+'-date').value;
-  const start=document.getElementById(who+'-start').value;
-  const end=document.getElementById(who+'-end').value;
-  const r=validateAvail(who,date,start,end);
-  if(!r.ok){showErr(who,r.msg);return;}
-  const loc=getLocation(who);
-  if(!loc){showErr(who,'Please select a location.');return;}
-  try {
-    const res = await api({action:'addAvail', person:who, date, start, end, location:loc});
-    if(res.success) {
-      avails.push({id:res.id, person:who, date, start, end, location:loc});
+async function addAvail(who){
+  const date=document.getElementById(who+'-date').value,start=document.getElementById(who+'-start').value,end=document.getElementById(who+'-end').value;
+  const r=validateAvail(who,date,start,end);if(!r.ok){showErr(who,r.msg);return;}
+  const loc=getLocation(who);if(!loc){showErr(who,'Please select a location.');return;}
+  try{
+    const res=await api({action:'addAvail',person:who,date,start,end,location:loc});
+    if(res.success){
+      avails.push({id:res.id,person:who,date,start,end,location:loc});
       avails.sort((a,b)=>(a.date+a.start).localeCompare(b.date+b.start));
       hideErr(who);
-      document.getElementById(who+'-date').value='';
-      document.getElementById(who+'-location').value='';
+      document.getElementById(who+'-date').value='';document.getElementById(who+'-location').value='';
       const wi=document.getElementById(who+'-location-wi');if(wi){wi.style.display='none';wi.value='';}
-      renderAdminSlots();
-      showBikePopup(who);
+      renderAdminSlots();showBikePopup(who);
     }
-  } catch(e) { showErr(who, 'Error saving. Please try again.'); }
+  }catch(e){showErr(who,'Error saving. Please try again.');}
 }
 
-async function removeAvail(id) {
-  try {
-    await api({action:'removeAvail', id});
-    avails = avails.filter(a => a.id != id);
-    renderAdminSlots();
-  } catch(e) { alert('Error removing slot.'); }
+async function removeAvail(id){
+  try{await api({action:'removeAvail',id});avails=avails.filter(a=>a.id!=id);renderAdminSlots();}
+  catch(e){alert('Error removing.');}
 }
 
 function showBikePopup(who){
   const label=who==='svbe'?'SVBE Staff':who==='tim'?'Tim':'Julie';
   document.getElementById('bike-popup-sub').textContent=`${label}'s availability saved to Google Sheets!`;
-  const o=document.getElementById('bike-popup-overlay');
-  o.style.display='flex';
+  const o=document.getElementById('bike-popup-overlay');o.style.display='flex';
   requestAnimationFrame(()=>requestAnimationFrame(()=>o.classList.add('show')));
 }
 function closeBikePopup(){const o=document.getElementById('bike-popup-overlay');o.classList.remove('show');setTimeout(()=>o.style.display='none',250);}
@@ -436,7 +406,6 @@ function renderAdminSlots(){
   }).join('');
 }
 
-// --- OVERLAP ENGINE ---
 function compute60MinOverlaps(){
   const dates=[...new Set(avails.map(a=>a.date))];const results=[];
   dates.forEach(date=>{
@@ -466,24 +435,15 @@ function compute30MinSlots(){
   });
 }
 
-// --- RECIPIENT FLOW ---
-function selectApptType(type){
-  selectedApptType=type;
-  document.getElementById('card-60').classList.toggle('selected',type==='60');
-  document.getElementById('card-30').classList.toggle('selected',type==='30');
-  document.getElementById('btn-next-type').disabled=false;
-}
+function selectApptType(type){selectedApptType=type;document.getElementById('card-60').classList.toggle('selected',type==='60');document.getElementById('card-30').classList.toggle('selected',type==='30');document.getElementById('btn-next-type').disabled=false;}
 
 async function goToSlots(){
   if(!selectedApptType)return;
-  document.getElementById('step-type').style.display='none';
-  document.getElementById('step-slots').style.display='block';
-  document.getElementById('booking-success').style.display='none';
+  document.getElementById('step-type').style.display='none';document.getElementById('step-slots').style.display='block';document.getElementById('booking-success').style.display='none';
   document.getElementById('appt-type-reminder').innerHTML=selectedApptType==='60'?`<span class="appt-type-badge badge-60">60-min · Bike pickup + free bike education</span>`:`<span class="appt-type-badge badge-30">30-min · Bike pickup only</span>`;
   document.getElementById('booking-slots').innerHTML='<div class="loading-bar">Loading available times...</div>';
   selectedOverlapId=null;selectedLCI={};
-  await loadAll();
-  renderRecipientSlots();
+  await loadAll();renderRecipientSlots();
 }
 
 function goBack(){document.getElementById('step-type').style.display='block';document.getElementById('step-slots').style.display='none';document.getElementById('recipient-form').style.display='none';selectedOverlapId=null;}
@@ -500,8 +460,7 @@ function renderRecipientSlots(){
     const drop=both&&o.type==='60'?`<div class="lci-select-wrap visible"><label>Choose your preferred instructor:</label><select onchange="selectLCI('${o.id}',this.value)"><option value="">Select...</option><option value="tim">Tim (English)</option><option value="julie">Julie (English & Spanish)</option></select></div>`:'';
     return`<div class="book-slot ${selectedOverlapId===o.id?'selected':''}" onclick="selectOverlap('${o.id}')"><div class="book-slot-date">${fmtDate(o.date)} · ${fmtTime(o.start)}–${fmtTime(o.end)}</div><div class="book-slot-details">${o.location}</div>${lciLine}${drop}</div>`;
   }).join('');
-  document.getElementById('recipient-form').style.display=selectedOverlapId?'block':'none';
-  updateConfirmBtn();
+  document.getElementById('recipient-form').style.display=selectedOverlapId?'block':'none';updateConfirmBtn();
 }
 
 function selectOverlap(id){selectedOverlapId=id;renderRecipientSlots();}
@@ -515,7 +474,7 @@ function updateConfirmBtn(){
     if(!o){document.getElementById('btn-confirm').disabled=true;return;}
     const both=o.lcis.includes('tim')&&o.lcis.includes('julie');
     document.getElementById('btn-confirm').disabled=both?!selectedLCI[selectedOverlapId]:false;
-  } else {document.getElementById('btn-confirm').disabled=false;}
+  }else{document.getElementById('btn-confirm').disabled=false;}
 }
 
 async function confirmBooking(){
@@ -525,35 +484,25 @@ async function confirmBooking(){
   let lci='';
   if(selectedApptType==='60'){const both=slot.lcis.includes('tim')&&slot.lcis.includes('julie');lci=both?(selectedLCI[selectedOverlapId]||''):slot.lcis[0];}
   const lciLabel=lci==='tim'?'Tim':lci==='julie'?'Julie':'';
-  document.getElementById('btn-confirm').disabled=true;
-  document.getElementById('btn-confirm').textContent='Saving...';
-  try {
-    await api({action:'addBooking', overlapId:slot.id, date:slot.date, start:slot.start, end:slot.end, location:slot.location, lci, name, phone, email, type:selectedApptType});
+  document.getElementById('btn-confirm').disabled=true;document.getElementById('btn-confirm').textContent='Saving...';
+  try{
+    await api({action:'addBooking',overlapId:slot.id,date:slot.date,start:slot.start,end:slot.end,location:slot.location,lci,name,phone,email,type:selectedApptType});
     bookings.push({overlapId:slot.id});
-    document.getElementById('step-slots').style.display='none';
-    document.getElementById('booking-success').style.display='block';
+    document.getElementById('step-slots').style.display='none';document.getElementById('booking-success').style.display='block';
     const tl=selectedApptType==='60'?'60-min bike pickup + free bike education':'30-min bike pickup';
     document.getElementById('success-detail').innerHTML=`<strong>${tl}</strong><br>${fmtDate(slot.date)} · ${fmtTime(slot.start)}–${fmtTime(slot.end)}<br>${slot.location}${lciLabel?`<br>Instructor: ${lciLabel}`:''}.<br><br><strong>Remember:</strong> Students must be present for helmet fitting and test ride.`;
-    selectedOverlapId=null;selectedLCI={};
-    ['rec-name','rec-phone','rec-email'].forEach(id=>document.getElementById(id).value='');
-  } catch(e) {
-    alert('Error confirming booking. Please try again.');
-    document.getElementById('btn-confirm').disabled=false;
-    document.getElementById('btn-confirm').textContent='Confirm my pickup';
-  }
+    selectedOverlapId=null;selectedLCI={};['rec-name','rec-phone','rec-email'].forEach(id=>document.getElementById(id).value='');
+  }catch(e){alert('Error confirming booking. Please try again.');document.getElementById('btn-confirm').disabled=false;document.getElementById('btn-confirm').textContent='Confirm my pickup';}
 }
 
-// --- BOOKINGS VIEW ---
 async function renderBookings(){
   await loadAll();
-  const tbody=document.getElementById('bookings-tbody');
-  const empty=document.getElementById('no-bookings');
+  const tbody=document.getElementById('bookings-tbody'),empty=document.getElementById('no-bookings');
   if(!bookings.length){tbody.innerHTML='';empty.style.display='block';return;}
   empty.style.display='none';
   tbody.innerHTML=bookings.map(b=>`<tr><td><span class="appt-type-badge ${b.type==='60'?'badge-60':'badge-30'}">${b.type==='60'?'60 min':'30 min'}</span></td><td>${fmtDate(b.date)}<br><span style="color:#888;font-size:12px;">${fmtTime(b.start)}–${fmtTime(b.end)}</span></td><td>${b.name}</td><td>${b.phone}${b.email?'<br><span style="color:#888;font-size:11px;">'+b.email+'</span>':''}</td><td style="font-size:12px;">${b.location}</td><td>${b.lci?`<span class="person-tag ${b.lci==='tim'?'tag-tim':'tag-julie'}">${b.lci==='tim'?'Tim':'Julie'}</span>`:'—'}</td></tr>`).join('');
 }
 
-// --- HOURS ---
 function renderHours(){
   const el=document.getElementById('hours-list');
   el.innerHTML=shopHours.map((h,i)=>`<div class="hours-row ${h.open?'':'closed'}" style="margin-bottom:8px;"><span class="day-label">${DAYS[i]}</span><label class="toggle"><input type="checkbox" ${h.open?'checked':''} onchange="toggleDay(${i},this.checked)"/><span class="slider"></span></label><input type="time" value="${h.start}" ${h.open?'':'disabled'} onchange="updateHour(${i},'start',this.value)" style="width:90px;flex:none;"/><span style="font-size:12px;color:#888;">to</span><input type="time" value="${h.end}" ${h.open?'':'disabled'} onchange="updateHour(${i},'end',this.value)" style="width:90px;flex:none;"/><span style="font-size:12px;color:#888;">${h.open?'':'Closed'}</span></div>`).join('');
@@ -561,7 +510,6 @@ function renderHours(){
 function toggleDay(i,c){shopHours[i].open=c;renderHours();}
 function updateHour(i,f,v){shopHours[i][f]=v;}
 
-// --- PIN ---
 function showPinOverlay(){pinEntry='';updatePinDots();document.getElementById('pin-error').textContent='';document.getElementById('pin-overlay').classList.add('show');}
 function hidePinOverlay(){document.getElementById('pin-overlay').classList.remove('show');}
 function pinKey(k){
@@ -586,7 +534,6 @@ function switchTab(tab){
   if(tab==='bookings')renderBookings();
 }
 
-// --- INIT ---
 updateCutoffBadge();
 loadSettings();
 </script>
