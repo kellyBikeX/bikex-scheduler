@@ -165,13 +165,14 @@
           <div class="appt-card-duration duration-60">60 minutes</div>
           <div class="appt-card-title">Bike pickup + free bike education</div>
           <div class="appt-card-desc">Bike, helmet, lock &amp; light pickup with a bike education and safety activity.</div>
-          <div class="appt-card-rec">★ Highly recommended</div>
+          <div class="appt-card-rec">★ Highly recommended for students who do not know how to ride a bike or want to practice bike basics</div>
         </div>
         <div class="appt-card" id="card-30" onclick="selectApptType('30')">
           <div class="appt-card-icon">⏱️</div>
           <div class="appt-card-duration duration-30">30 minutes</div>
           <div class="appt-card-title">Bike pickup only</div>
           <div class="appt-card-desc">Bike, helmet, lock &amp; light pickup with helmet fitting and student test ride.</div>
+          <div class="appt-card-rec" style="color:#625140;">★ Recommended for students who know how to ride a bike safely</div>
         </div>
       </div>
       <button class="btn-confirm" id="btn-next-type" onclick="goToSlots()" disabled style="max-width:200px;margin:0 auto;display:block;">See available times</button>
@@ -449,7 +450,6 @@ function renderAdminSlots(){
 
 // --- OVERLAP ENGINE ---
 function compute60MinOverlaps(){
-  const DURATION=60;
   const dates=[...new Set(avails.map(a=>a.date))];const results=[];
   dates.forEach(date=>{
     const svbeB=avails.filter(a=>a.person==='svbe'&&a.date===date);
@@ -457,34 +457,25 @@ function compute60MinOverlaps(){
     const julieB=avails.filter(a=>a.person==='julie'&&a.date===date);
     svbeB.forEach(svbe=>{
       const ss=timeToMins(svbe.start),se=timeToMins(svbe.end);
-      for(let slotStart=ss;slotStart+DURATION<=se;slotStart+=DURATION){
-        const slotEnd=slotStart+DURATION;
-        const lcis=[];
-        timB.forEach(t=>{if(t.location===svbe.location&&timeToMins(t.start)<=slotStart&&timeToMins(t.end)>=slotEnd)lcis.push('tim');});
-        julieB.forEach(j=>{if(j.location===svbe.location&&timeToMins(j.start)<=slotStart&&timeToMins(j.end)>=slotEnd)lcis.push('julie');});
-        if(!lcis.length)continue;
-        const id=`60-${date}-${slotStart}-${slotEnd}-${svbe.id}`;
+      const tW=timB.map(t=>{const os=Math.max(ss,timeToMins(t.start)),oe=Math.min(se,timeToMins(t.end));return os<oe&&t.location===svbe.location?{start:os,end:oe,who:'tim'}:null;}).filter(Boolean);
+      const jW=julieB.map(j=>{const os=Math.max(ss,timeToMins(j.start)),oe=Math.min(se,timeToMins(j.end));return os<oe&&j.location===svbe.location?{start:os,end:oe,who:'julie'}:null;}).filter(Boolean);
+      const allW=[];[...tW,...jW].forEach(w=>{const ex=allW.find(x=>x.start===w.start&&x.end===w.end);if(ex){if(!ex.lcis.includes(w.who))ex.lcis.push(w.who);}else allW.push({start:w.start,end:w.end,lcis:[w.who]});});
+      allW.forEach(w=>{
+        const id=`60-${date}-${w.start}-${w.end}-${svbe.id}`;
         const booked=bookings.find(b=>b.overlapId===id);
-        results.push({id,date,start:minsToTime(slotStart),end:minsToTime(slotEnd),location:svbe.location,lcis,booked:!!booked,type:'60'});
-      }
+        results.push({id,date,start:minsToTime(w.start),end:minsToTime(w.end),location:svbe.location,lcis:w.lcis,booked:!!booked,type:'60'});
+      });
     });
   });
   return results;
 }
 
 function compute30MinSlots(){
-  const DURATION=30;
-  const results=[];
-  avails.filter(a=>a.person==='svbe').forEach(svbe=>{
-    const ss=timeToMins(svbe.start),se=timeToMins(svbe.end);
-    for(let slotStart=ss;slotStart+DURATION<=se;slotStart+=DURATION){
-      const slotEnd=slotStart+DURATION;
-      const id=`30-${svbe.date}-${slotStart}-${slotEnd}-${svbe.id}`;
-      const booked=bookings.find(b=>b.overlapId===id);
-      results.push({id,date:svbe.date,start:minsToTime(slotStart),end:minsToTime(slotEnd),location:svbe.location,lcis:[],booked:!!booked,type:'30'});
-    }
+  return avails.filter(a=>a.person==='svbe').map(svbe=>{
+    const id=`30-${svbe.date}-${svbe.id}`;
+    const booked=bookings.find(b=>b.overlapId===id);
+    return{id,date:svbe.date,start:svbe.start,end:svbe.end,location:svbe.location,lcis:[],booked:!!booked,type:'30'};
   });
-  return results;
 }
 
 // --- RECIPIENT FLOW ---
@@ -518,8 +509,7 @@ function renderRecipientSlots(){
   el.innerHTML=slots.map(o=>{
     const both=o.lcis.includes('tim')&&o.lcis.includes('julie');
     const lciLine=o.type==='60'&&!both?`<div style="font-size:12px;color:#666;margin-top:4px;">Instructor: ${o.lcis[0]==='tim'?'Tim (English)':'Julie (English & Spanish)'}</div>`:'';
-    const savedLCI=selectedLCI[o.id]||'';
-    const drop=both&&o.type==='60'?`<div class="lci-select-wrap visible" onclick="event.stopPropagation()"><label>Choose your preferred instructor:</label><select onchange="selectLCI('${o.id}',this.value)"><option value="" ${savedLCI===''?'selected':''}>Select...</option><option value="tim" ${savedLCI==='tim'?'selected':''}>Tim (English)</option><option value="julie" ${savedLCI==='julie'?'selected':''}>Julie (English & Spanish)</option></select></div>`:'';
+    const drop=both&&o.type==='60'?`<div class="lci-select-wrap visible"><label>Choose your preferred instructor:</label><select onchange="selectLCI('${o.id}',this.value)"><option value="">Select...</option><option value="tim">Tim (English)</option><option value="julie">Julie (English & Spanish)</option></select></div>`:'';
     return`<div class="book-slot ${selectedOverlapId===o.id?'selected':''}" onclick="selectOverlap('${o.id}')"><div class="book-slot-date">${fmtDate(o.date)} · ${fmtTime(o.start)}–${fmtTime(o.end)}</div><div class="book-slot-details">${o.location}</div>${lciLine}${drop}</div>`;
   }).join('');
   document.getElementById('recipient-form').style.display=selectedOverlapId?'block':'none';
