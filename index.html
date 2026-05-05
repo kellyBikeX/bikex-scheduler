@@ -88,6 +88,8 @@
   .bookings-table{width:100%;font-size:13px;border-collapse:collapse;}
   .bookings-table th{text-align:left;padding:8px 10px;color:#888;font-weight:500;border-bottom:1px solid #e5e5e0;}
   .bookings-table td{padding:9px 10px;border-bottom:1px solid #e5e5e0;color:#111;vertical-align:top;}
+  .btn-cancel-booking{font-size:11px;padding:3px 8px;border:1px solid #f09595;border-radius:5px;background:#fcebeb;color:#a32d2d;cursor:pointer;white-space:nowrap;}
+  .btn-cancel-booking:hover{background:#f5c5c5;}
   .empty-state{text-align:center;padding:2rem;color:#888;font-size:14px;}
   .cutoff-badge{display:inline-flex;align-items:center;gap:6px;background:#fff8f0;border:1px solid #ffcfa0;border-radius:8px;padding:8px 12px;font-size:13px;color:var(--svbe-brown);margin-bottom:1rem;}
   .day-label{font-size:13px;min-width:30px;color:#111;font-weight:500;}
@@ -165,14 +167,13 @@
           <div class="appt-card-duration duration-60">60 minutes</div>
           <div class="appt-card-title">Bike pickup + free bike education</div>
           <div class="appt-card-desc">Bike, helmet, lock &amp; light pickup with a bike education and safety activity.</div>
-          <div class="appt-card-rec">★ Highly recommended for students who do not know how to ride a bike or want to practice bike basics</div>
+          <div class="appt-card-rec">★ Highly recommended</div>
         </div>
         <div class="appt-card" id="card-30" onclick="selectApptType('30')">
           <div class="appt-card-icon">⏱️</div>
           <div class="appt-card-duration duration-30">30 minutes</div>
           <div class="appt-card-title">Bike pickup only</div>
           <div class="appt-card-desc">Bike, helmet, lock &amp; light pickup with helmet fitting and student test ride.</div>
-          <div class="appt-card-rec" style="color:#625140;">★ Recommended for students who know how to ride a bike safely</div>
         </div>
       </div>
       <button class="btn-confirm" id="btn-next-type" onclick="goToSlots()" disabled style="max-width:200px;margin:0 auto;display:block;">See available times</button>
@@ -251,7 +252,7 @@
   <div class="panel" id="panel-bookings">
     <p class="section-label">confirmed bookings</p>
     <div class="card" style="overflow-x:auto;">
-      <table class="bookings-table"><thead><tr><th>Type</th><th>Date / Time</th><th>Recipient</th><th>Phone</th><th>Location</th><th>LCI</th></tr></thead><tbody id="bookings-tbody"></tbody></table>
+      <table class="bookings-table"><thead><tr><th>Type</th><th>Date / Time</th><th>Recipient</th><th>Phone</th><th>Location</th><th>LCI</th><th></th></tr></thead><tbody id="bookings-tbody"></tbody></table>
       <div class="empty-state" id="no-bookings">No bookings yet.</div>
     </div>
   </div>
@@ -449,32 +450,60 @@ function renderAdminSlots(){
 }
 
 // --- OVERLAP ENGINE ---
+// Returns which LCIs are available at a given minute within a SVBE window
+function getLCIsAtMinute(minute, date, location, svbeEnd) {
+  const lcis = [];
+  ['tim','julie'].forEach(who => {
+    avails.filter(a => a.person === who && a.date === date && a.location === location).forEach(a => {
+      if (timeToMins(a.start) <= minute && timeToMins(a.end) >= minute + 60) {
+        if (!lcis.includes(who)) lcis.push(who);
+      }
+    });
+  });
+  return lcis;
+}
+
 function compute60MinOverlaps(){
   const dates=[...new Set(avails.map(a=>a.date))];const results=[];
   dates.forEach(date=>{
     const svbeB=avails.filter(a=>a.person==='svbe'&&a.date===date);
-    const timB=avails.filter(a=>a.person==='tim'&&a.date===date);
-    const julieB=avails.filter(a=>a.person==='julie'&&a.date===date);
     svbeB.forEach(svbe=>{
       const ss=timeToMins(svbe.start),se=timeToMins(svbe.end);
-      const tW=timB.map(t=>{const os=Math.max(ss,timeToMins(t.start)),oe=Math.min(se,timeToMins(t.end));return os<oe&&t.location===svbe.location?{start:os,end:oe,who:'tim'}:null;}).filter(Boolean);
-      const jW=julieB.map(j=>{const os=Math.max(ss,timeToMins(j.start)),oe=Math.min(se,timeToMins(j.end));return os<oe&&j.location===svbe.location?{start:os,end:oe,who:'julie'}:null;}).filter(Boolean);
-      const allW=[];[...tW,...jW].forEach(w=>{const ex=allW.find(x=>x.start===w.start&&x.end===w.end);if(ex){if(!ex.lcis.includes(w.who))ex.lcis.push(w.who);}else allW.push({start:w.start,end:w.end,lcis:[w.who]});});
-      allW.forEach(w=>{
-        const id=`60-${date}-${w.start}-${w.end}-${svbe.id}`;
+      // Walk through the window in 30-min steps, emit 60-min slots where an LCI is fully available
+      const seen = new Set();
+      for(let t=ss; t+60<=se; t+=30){
+        const lcis = getLCIsAtMinute(t, date, svbe.location, se);
+        if(!lcis.length) continue;
+        const id=`60-${date}-${t}-${svbe.id}`;
+        if(seen.has(id)) continue; seen.add(id);
         const booked=bookings.find(b=>b.overlapId===id);
-        results.push({id,date,start:minsToTime(w.start),end:minsToTime(w.end),location:svbe.location,lcis:w.lcis,booked:!!booked,type:'60'});
-      });
+        results.push({id,date,start:minsToTime(t),end:minsToTime(t+60),location:svbe.location,lcis,booked:!!booked,type:'60'});
+      }
     });
   });
-  return results;
+  // Deduplicate by start time / location (different SVBE windows on same day shouldn't double-list)
+  const seen2 = new Set();
+  return results.filter(r => {
+    const key = `${r.date}-${r.start}-${r.location}`;
+    if(seen2.has(key)) return false; seen2.add(key); return true;
+  });
 }
 
 function compute30MinSlots(){
-  return avails.filter(a=>a.person==='svbe').map(svbe=>{
-    const id=`30-${svbe.date}-${svbe.id}`;
-    const booked=bookings.find(b=>b.overlapId===id);
-    return{id,date:svbe.date,start:svbe.start,end:svbe.end,location:svbe.location,lcis:[],booked:!!booked,type:'30'};
+  const results=[];
+  avails.filter(a=>a.person==='svbe').forEach(svbe=>{
+    const ss=timeToMins(svbe.start),se=timeToMins(svbe.end);
+    for(let t=ss; t+30<=se; t+=30){
+      const id=`30-${svbe.date}-${t}-${svbe.id}`;
+      const booked=bookings.find(b=>b.overlapId===id);
+      results.push({id,date:svbe.date,start:minsToTime(t),end:minsToTime(t+30),location:svbe.location,lcis:[],booked:!!booked,type:'30'});
+    }
+  });
+  // Deduplicate by date+start+location
+  const seen = new Set();
+  return results.filter(r => {
+    const key = `${r.date}-${r.start}-${r.location}`;
+    if(seen.has(key)) return false; seen.add(key); return true;
   });
 }
 
@@ -562,7 +591,18 @@ async function renderBookings(){
   const empty=document.getElementById('no-bookings');
   if(!bookings.length){tbody.innerHTML='';empty.style.display='block';return;}
   empty.style.display='none';
-  tbody.innerHTML=bookings.map(b=>`<tr><td><span class="appt-type-badge ${b.type==='60'?'badge-60':'badge-30'}">${b.type==='60'?'60 min':'30 min'}</span></td><td>${fmtDate(b.date)}<br><span style="color:#888;font-size:12px;">${fmtTime(b.start)}–${fmtTime(b.end)}</span></td><td>${b.name}</td><td>${b.phone}${b.email?'<br><span style="color:#888;font-size:11px;">'+b.email+'</span>':''}</td><td style="font-size:12px;">${b.location}</td><td>${b.lci?`<span class="person-tag ${b.lci==='tim'?'tag-tim':'tag-julie'}">${b.lci==='tim'?'Tim':'Julie'}</span>`:'—'}</td></tr>`).join('');
+  tbody.innerHTML=bookings.map((b,i)=>`<tr><td><span class="appt-type-badge ${b.type==='60'?'badge-60':'badge-30'}">${b.type==='60'?'60 min':'30 min'}</span></td><td>${fmtDate(b.date)}<br><span style="color:#888;font-size:12px;">${fmtTime(b.start)}–${fmtTime(b.end)}</span></td><td>${b.name}</td><td>${b.phone}${b.email?'<br><span style="color:#888;font-size:11px;">'+b.email+'</span>':''}</td><td style="font-size:12px;">${b.location}</td><td>${b.lci?`<span class="person-tag ${b.lci==='tim'?'tag-tim':'tag-julie'}">${b.lci==='tim'?'Tim':'Julie'}</span>`:'—'}</td><td><button class="btn-cancel-booking" onclick="cancelBooking('${b.overlapId}', '${(b.name||'').replace(/'/g,"\\'")}')">Cancel</button></td></tr>`).join('');
+}
+
+async function cancelBooking(overlapId, name){
+  if(!confirm(`Cancel booking for ${name}? This cannot be undone.`)) return;
+  try {
+    const res = await api({action:'cancelBooking', overlapId});
+    if(res.success){
+      bookings = bookings.filter(b => b.overlapId !== overlapId);
+      renderBookings();
+    } else { alert('Could not cancel booking. Please try again.'); }
+  } catch(e){ alert('Error cancelling booking.'); }
 }
 
 // --- HOURS ---
