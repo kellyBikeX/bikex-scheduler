@@ -578,7 +578,16 @@ async function confirmBooking(){
   document.getElementById('btn-confirm').disabled=true;
   document.getElementById('btn-confirm').textContent='Saving...';
   try {
-    await api({action:'addBooking', overlapId:slot.id, date:slot.date, start:slot.start, end:slot.end, location:slot.location, lci, name, phone, email, type:selectedApptType});
+    const res = await api({action:'addBooking', overlapId:slot.id, date:slot.date, start:slot.start, end:slot.end, location:slot.location, lci, name, phone, email, type:selectedApptType});
+    if(res.alreadyBooked){
+      alert('Sorry, that time slot was just booked by someone else. Please choose another time.');
+      document.getElementById('btn-confirm').disabled=false;
+      document.getElementById('btn-confirm').textContent='Confirm my pickup';
+      selectedOverlapId=null;
+      await loadAll();
+      renderRecipientSlots();
+      return;
+    }
     bookings.push({overlapId:slot.id});
     document.getElementById('step-slots').style.display='none';
     document.getElementById('booking-success').style.display='block';
