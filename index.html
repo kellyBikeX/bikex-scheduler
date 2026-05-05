@@ -189,6 +189,7 @@
         <div class="form-group"><label>Full name</label><input type="text" id="rec-name" placeholder="Your name" oninput="updateConfirmBtn()"/></div>
         <div class="form-group"><label>Phone number</label><input type="text" id="rec-phone" placeholder="(555) 000-0000" oninput="updateConfirmBtn()"/></div>
         <div class="form-group"><label>Email (optional)</label><input type="text" id="rec-email" placeholder="you@email.com"/></div>
+        <div class="form-group"><label>Comments or questions (optional)</label><textarea id="rec-comments" placeholder="Any questions, accessibility needs, or other notes for us..." style="width:100%;padding:9px 12px;border:1px solid #ccc;border-radius:8px;font-size:14px;background:#f9f9f7;color:#111;resize:vertical;min-height:80px;font-family:inherit;"></textarea></div>
         <button class="btn-confirm" id="btn-confirm" onclick="confirmBooking()" disabled>Confirm my pickup</button>
       </div>
     </div>
@@ -252,7 +253,7 @@
   <div class="panel" id="panel-bookings">
     <p class="section-label">confirmed bookings</p>
     <div class="card" style="overflow-x:auto;">
-      <table class="bookings-table"><thead><tr><th>Type</th><th>Date / Time</th><th>Recipient</th><th>Phone</th><th>Location</th><th>LCI</th><th></th></tr></thead><tbody id="bookings-tbody"></tbody></table>
+      <table class="bookings-table"><thead><tr><th>Type</th><th>Date / Time</th><th>Recipient</th><th>Phone</th><th>Location</th><th>LCI</th><th>Comments</th><th></th></tr></thead><tbody id="bookings-tbody"></tbody></table>
       <div class="empty-state" id="no-bookings">No bookings yet.</div>
     </div>
   </div>
@@ -414,6 +415,8 @@ async function addAvail(who) {
       avails.sort((a,b)=>(a.date+a.start).localeCompare(b.date+b.start));
       hideErr(who);
       document.getElementById(who+'-date').value='';
+      document.getElementById(who+'-start').value=shopHours.find(h=>h.open)?.start||'10:00';
+      document.getElementById(who+'-end').value=shopHours.find(h=>h.open)?.end||'17:00';
       document.getElementById(who+'-location').value='';
       const wi=document.getElementById(who+'-location-wi');if(wi){wi.style.display='none';wi.value='';}
       renderAdminSlots();
@@ -442,7 +445,8 @@ function closeBikePopup(){const o=document.getElementById('bike-popup-overlay');
 function renderAdminSlots(){
   const el=document.getElementById('admin-slot-list');
   if(!avails.length){el.innerHTML='<div class="empty-state">No availability entered yet.</div>';return;}
-  el.innerHTML=avails.map(a=>{
+  const sorted=[...avails].sort((a,b)=>(a.date+a.start).localeCompare(b.date+b.start));
+  el.innerHTML=sorted.map(a=>{
     const tc=a.person==='svbe'?'tag-svbe':a.person==='tim'?'tag-tim':'tag-julie';
     const lb=a.person==='svbe'?'SVBE Staff':a.person==='tim'?'Tim':'Julie';
     return`<div class="slot-item"><div class="slot-meta"><div>${fmtDate(a.date)} · ${fmtTime(a.start)}–${fmtTime(a.end)}</div><div class="slot-meta-sub"><span class="person-tag ${tc}">${lb}</span> · ${a.location}</div></div><button class="btn-remove" onclick="removeAvail('${a.id}')">✕</button></div>`;
@@ -479,7 +483,8 @@ function getLCIsForSlot(slotStart, date, location) {
 }
 
 function compute60MinOverlaps(){
-  const dates=[...new Set(avails.map(a=>a.date))];
+  const todayStr=new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD in local time
+  const dates=[...new Set(avails.map(a=>a.date))].filter(d=>d>=todayStr);
   const results=[];
   const seenKey = new Set();
   dates.forEach(date=>{
@@ -500,13 +505,15 @@ function compute60MinOverlaps(){
       }
     });
   });
+  results.sort((a,b)=>(a.date+a.start).localeCompare(b.date+b.start));
   return results;
 }
 
 function compute30MinSlots(){
+  const todayStr=new Date().toLocaleDateString('en-CA');
   const results=[];
   const seenKey = new Set();
-  avails.filter(a=>a.person==='svbe').forEach(svbe=>{
+  avails.filter(a=>a.person==='svbe'&&a.date>=todayStr).forEach(svbe=>{
     const ss=timeToMins(svbe.start),se=timeToMins(svbe.end);
     const bookedRanges = getBookedRanges(svbe.date, svbe.location);
     for(let t=ss; t+30<=se; t+=30){
@@ -519,6 +526,7 @@ function compute30MinSlots(){
       results.push({id,date:svbe.date,start:minsToTime(t),end:minsToTime(t+30),location:svbe.location,lcis:[],booked:false,type:'30'});
     }
   });
+  results.sort((a,b)=>(a.date+a.start).localeCompare(b.date+b.start));
   return results;
 }
 
@@ -544,11 +552,11 @@ async function goToSlots(){
 
 function goBack(){document.getElementById('step-type').style.display='block';document.getElementById('step-slots').style.display='none';document.getElementById('recipient-form').style.display='none';selectedOverlapId=null;}
 
-function resetRecipient(){selectedApptType=null;selectedOverlapId=null;selectedLCI={};document.getElementById('card-60').classList.remove('selected');document.getElementById('card-30').classList.remove('selected');document.getElementById('btn-next-type').disabled=true;document.getElementById('step-type').style.display='block';document.getElementById('step-slots').style.display='none';document.getElementById('booking-success').style.display='none';['rec-name','rec-phone','rec-email'].forEach(id=>document.getElementById(id).value='');}
+function resetRecipient(){selectedApptType=null;selectedOverlapId=null;selectedLCI={};document.getElementById('card-60').classList.remove('selected');document.getElementById('card-30').classList.remove('selected');document.getElementById('btn-next-type').disabled=true;document.getElementById('step-type').style.display='block';document.getElementById('step-slots').style.display='none';document.getElementById('booking-success').style.display='none';['rec-name','rec-phone','rec-email','rec-comments'].forEach(id=>document.getElementById(id).value='');}
 
 function renderRecipientSlots(){
   const el=document.getElementById('booking-slots');
-  const slots=(selectedApptType==='60'?compute60MinOverlaps():compute30MinSlots()).filter(o=>!o.booked);
+  const slots=(selectedApptType==='60'?compute60MinOverlaps():compute30MinSlots());
   if(!slots.length){el.innerHTML='<div class="empty-state" style="padding:2rem 0;">No pickup times available right now.<br>Please check back soon or contact BikeX at info@bikex.org.</div>';document.getElementById('recipient-form').style.display='none';return;}
   el.innerHTML=slots.map(o=>{
     const both=o.lcis.includes('tim')&&o.lcis.includes('julie');
@@ -575,6 +583,8 @@ function selectLCI(oid,val){
 function updateConfirmBtn(){
   const name=document.getElementById('rec-name').value.trim(),phone=document.getElementById('rec-phone').value.trim();
   if(!selectedOverlapId||!name||!phone){document.getElementById('btn-confirm').disabled=true;return;}
+  const digits=phone.replace(/\D/g,'');
+  if(digits.length<7){document.getElementById('btn-confirm').disabled=true;return;}
   if(selectedApptType==='60'){
     const o=compute60MinOverlaps().find(x=>x.id===selectedOverlapId);
     if(!o){document.getElementById('btn-confirm').disabled=true;return;}
@@ -586,14 +596,14 @@ function updateConfirmBtn(){
 async function confirmBooking(){
   const slot=(selectedApptType==='60'?compute60MinOverlaps():compute30MinSlots()).find(o=>o.id===selectedOverlapId);
   if(!slot)return;
-  const name=document.getElementById('rec-name').value.trim(),phone=document.getElementById('rec-phone').value.trim(),email=document.getElementById('rec-email').value.trim();
+  const name=document.getElementById('rec-name').value.trim(),phone=document.getElementById('rec-phone').value.trim(),email=document.getElementById('rec-email').value.trim(),comments=document.getElementById('rec-comments').value.trim();
   let lci='';
   if(selectedApptType==='60'){const both=slot.lcis.includes('tim')&&slot.lcis.includes('julie');lci=both?(selectedLCI[selectedOverlapId]||''):slot.lcis[0];}
   const lciLabel=lci==='tim'?'Tim':lci==='julie'?'Julie':'';
   document.getElementById('btn-confirm').disabled=true;
   document.getElementById('btn-confirm').textContent='Saving...';
   try {
-    const res = await api({action:'addBooking', overlapId:slot.id, date:slot.date, start:slot.start, end:slot.end, location:slot.location, lci, name, phone, email, type:selectedApptType});
+    const res = await api({action:'addBooking', overlapId:slot.id, date:slot.date, start:slot.start, end:slot.end, location:slot.location, lci, name, phone, email, comments, type:selectedApptType});
     if(res.alreadyBooked){
       alert('Sorry, that time slot was just booked by someone else. Please choose another time.');
       document.getElementById('btn-confirm').disabled=false;
@@ -609,7 +619,7 @@ async function confirmBooking(){
     const tl=selectedApptType==='60'?'60-min bike pickup + free bike education':'30-min bike pickup';
     document.getElementById('success-detail').innerHTML=`<strong>${tl}</strong><br>${fmtDate(slot.date)} · ${fmtTime(slot.start)}–${fmtTime(slot.end)}<br>${slot.location}${lciLabel?`<br>Instructor: ${lciLabel}`:''}.<br><br><strong>Remember:</strong> Students must be present for helmet fitting and test ride.`;
     selectedOverlapId=null;selectedLCI={};
-    ['rec-name','rec-phone','rec-email'].forEach(id=>document.getElementById(id).value='');
+    ['rec-name','rec-phone','rec-email','rec-comments'].forEach(id=>document.getElementById(id).value='');
   } catch(e) {
     alert('Error confirming booking. Please try again.');
     document.getElementById('btn-confirm').disabled=false;
@@ -622,12 +632,13 @@ async function renderBookings(){
   const tbody=document.getElementById('bookings-tbody');
   const empty=document.getElementById('no-bookings');
   // Show loading state immediately
-  tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:1.5rem;color:#888;">Loading bookings...</td></tr>';
+  tbody.innerHTML='<tr><td colspan="8" style="text-align:center;padding:1.5rem;color:#888;">Loading bookings...</td></tr>';
   empty.style.display='none';
   await loadAll();
   if(!bookings.length){tbody.innerHTML='';empty.style.display='block';return;}
   empty.style.display='none';
-  tbody.innerHTML=bookings.map((b)=>{
+  const sortedBookings=[...bookings].sort((a,b)=>(a.date+a.start).localeCompare(b.date+b.start));
+  tbody.innerHTML=sortedBookings.map((b)=>{
     const btype=String(b.type||'');
     const badge=btype==='60'?'badge-60':'badge-30';
     const label=btype==='60'?'60 min':'30 min';
@@ -641,6 +652,7 @@ async function renderBookings(){
       <td>${b.phone||''}${emailLine}</td>
       <td style="font-size:12px;">${b.location||''}</td>
       <td>${lciCell}</td>
+      <td style="font-size:12px;color:#555;max-width:160px;">${b.comments||'—'}</td>
       <td><button class="btn-cancel-booking" onclick="cancelBooking('${b.overlapId}','${safeName}')">Cancel</button></td>
     </tr>`;
   }).join('');
@@ -662,8 +674,8 @@ function renderHours(){
   const el=document.getElementById('hours-list');
   el.innerHTML=shopHours.map((h,i)=>`<div class="hours-row ${h.open?'':'closed'}" style="margin-bottom:8px;"><span class="day-label">${DAYS[i]}</span><label class="toggle"><input type="checkbox" ${h.open?'checked':''} onchange="toggleDay(${i},this.checked)"/><span class="slider"></span></label><input type="time" value="${h.start}" ${h.open?'':'disabled'} onchange="updateHour(${i},'start',this.value)" style="width:90px;flex:none;"/><span style="font-size:12px;color:#888;">to</span><input type="time" value="${h.end}" ${h.open?'':'disabled'} onchange="updateHour(${i},'end',this.value)" style="width:90px;flex:none;"/><span style="font-size:12px;color:#888;">${h.open?'':'Closed'}</span></div>`).join('');
 }
-function toggleDay(i,c){shopHours[i].open=c;renderHours();}
-function updateHour(i,f,v){shopHours[i][f]=v;}
+function toggleDay(i,c){shopHours[i].open=c;renderHours();saveSettings();}
+function updateHour(i,f,v){shopHours[i][f]=v;saveSettings();}
 
 // --- PIN ---
 function showPinOverlay(){pinEntry='';updatePinDots();document.getElementById('pin-error').textContent='';document.getElementById('pin-overlay').classList.add('show');}
