@@ -450,12 +450,27 @@ function renderAdminSlots(){
 }
 
 // --- OVERLAP ENGINE ---
-// Returns which LCIs are available at a given minute within a SVBE window
-function getLCIsAtMinute(minute, date, location, svbeEnd) {
+// Build a set of booked minute-ranges per date+location so we can block overlapping slots
+function getBookedRanges(date, location) {
+  // bookings have .date, .start, .end stored from when they were saved
+  return bookings
+    .filter(b => b.date === date && b.location === location)
+    .map(b => ({s: timeToMins(b.start), e: timeToMins(b.end)}));
+}
+
+// Does a proposed slot [slotStart, slotStart+duration) overlap any booked range?
+function overlapsBooked(slotStart, duration, bookedRanges) {
+  const slotEnd = slotStart + duration;
+  return bookedRanges.some(r => slotStart < r.e && slotEnd > r.s);
+}
+
+// Returns which LCIs are fully available for an entire 60-min window
+function getLCIsForSlot(slotStart, date, location) {
+  const slotEnd = slotStart + 60;
   const lcis = [];
   ['tim','julie'].forEach(who => {
     avails.filter(a => a.person === who && a.date === date && a.location === location).forEach(a => {
-      if (timeToMins(a.start) <= minute && timeToMins(a.end) >= minute + 60) {
+      if (timeToMins(a.start) <= slotStart && timeToMins(a.end) >= slotEnd) {
         if (!lcis.includes(who)) lcis.push(who);
       }
     });
@@ -464,47 +479,47 @@ function getLCIsAtMinute(minute, date, location, svbeEnd) {
 }
 
 function compute60MinOverlaps(){
-  const dates=[...new Set(avails.map(a=>a.date))];const results=[];
+  const dates=[...new Set(avails.map(a=>a.date))];
+  const results=[];
+  const seenKey = new Set();
   dates.forEach(date=>{
     const svbeB=avails.filter(a=>a.person==='svbe'&&a.date===date);
     svbeB.forEach(svbe=>{
       const ss=timeToMins(svbe.start),se=timeToMins(svbe.end);
-      // Walk through the window in 30-min steps, emit 60-min slots where an LCI is fully available
-      const seen = new Set();
+      const bookedRanges = getBookedRanges(date, svbe.location);
       for(let t=ss; t+60<=se; t+=30){
-        const lcis = getLCIsAtMinute(t, date, svbe.location, se);
+        const key=`${date}-${t}-${svbe.location}`;
+        if(seenKey.has(key)) continue;
+        const lcis = getLCIsForSlot(t, date, svbe.location);
         if(!lcis.length) continue;
+        // Skip if this slot overlaps any existing booking (any type)
+        if(overlapsBooked(t, 60, bookedRanges)) continue;
+        seenKey.add(key);
         const id=`60-${date}-${t}-${svbe.id}`;
-        if(seen.has(id)) continue; seen.add(id);
-        const booked=bookings.find(b=>b.overlapId===id);
-        results.push({id,date,start:minsToTime(t),end:minsToTime(t+60),location:svbe.location,lcis,booked:!!booked,type:'60'});
+        results.push({id,date,start:minsToTime(t),end:minsToTime(t+60),location:svbe.location,lcis,booked:false,type:'60'});
       }
     });
   });
-  // Deduplicate by start time / location (different SVBE windows on same day shouldn't double-list)
-  const seen2 = new Set();
-  return results.filter(r => {
-    const key = `${r.date}-${r.start}-${r.location}`;
-    if(seen2.has(key)) return false; seen2.add(key); return true;
-  });
+  return results;
 }
 
 function compute30MinSlots(){
   const results=[];
+  const seenKey = new Set();
   avails.filter(a=>a.person==='svbe').forEach(svbe=>{
     const ss=timeToMins(svbe.start),se=timeToMins(svbe.end);
+    const bookedRanges = getBookedRanges(svbe.date, svbe.location);
     for(let t=ss; t+30<=se; t+=30){
+      const key=`${svbe.date}-${t}-${svbe.location}`;
+      if(seenKey.has(key)) continue;
+      // Skip if this slot overlaps any existing booking (any type)
+      if(overlapsBooked(t, 30, bookedRanges)) continue;
+      seenKey.add(key);
       const id=`30-${svbe.date}-${t}-${svbe.id}`;
-      const booked=bookings.find(b=>b.overlapId===id);
-      results.push({id,date:svbe.date,start:minsToTime(t),end:minsToTime(t+30),location:svbe.location,lcis:[],booked:!!booked,type:'30'});
+      results.push({id,date:svbe.date,start:minsToTime(t),end:minsToTime(t+30),location:svbe.location,lcis:[],booked:false,type:'30'});
     }
   });
-  // Deduplicate by date+start+location
-  const seen = new Set();
-  return results.filter(r => {
-    const key = `${r.date}-${r.start}-${r.location}`;
-    if(seen.has(key)) return false; seen.add(key); return true;
-  });
+  return results;
 }
 
 // --- RECIPIENT FLOW ---
@@ -588,7 +603,7 @@ async function confirmBooking(){
       renderRecipientSlots();
       return;
     }
-    bookings.push({overlapId:slot.id});
+    bookings.push({overlapId:slot.id, date:slot.date, start:slot.start, end:slot.end, location:slot.location, type:selectedApptType});
     document.getElementById('step-slots').style.display='none';
     document.getElementById('booking-success').style.display='block';
     const tl=selectedApptType==='60'?'60-min bike pickup + free bike education':'30-min bike pickup';
