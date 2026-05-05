@@ -619,12 +619,31 @@ async function confirmBooking(){
 
 // --- BOOKINGS VIEW ---
 async function renderBookings(){
-  await loadAll();
   const tbody=document.getElementById('bookings-tbody');
   const empty=document.getElementById('no-bookings');
+  // Show loading state immediately
+  tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:1.5rem;color:#888;">Loading bookings...</td></tr>';
+  empty.style.display='none';
+  await loadAll();
   if(!bookings.length){tbody.innerHTML='';empty.style.display='block';return;}
   empty.style.display='none';
-  tbody.innerHTML=bookings.map((b,i)=>`<tr><td><span class="appt-type-badge ${b.type==='60'?'badge-60':'badge-30'}">${b.type==='60'?'60 min':'30 min'}</span></td><td>${fmtDate(b.date)}<br><span style="color:#888;font-size:12px;">${fmtTime(b.start)}–${fmtTime(b.end)}</span></td><td>${b.name}</td><td>${b.phone}${b.email?'<br><span style="color:#888;font-size:11px;">'+b.email+'</span>':''}</td><td style="font-size:12px;">${b.location}</td><td>${b.lci?`<span class="person-tag ${b.lci==='tim'?'tag-tim':'tag-julie'}">${b.lci==='tim'?'Tim':'Julie'}</span>`:'—'}</td><td><button class="btn-cancel-booking" onclick="cancelBooking('${b.overlapId}', '${(b.name||'').replace(/'/g,"\\'")}')">Cancel</button></td></tr>`).join('');
+  tbody.innerHTML=bookings.map((b)=>{
+    const btype=String(b.type||'');
+    const badge=btype==='60'?'badge-60':'badge-30';
+    const label=btype==='60'?'60 min':'30 min';
+    const lciCell=b.lci?`<span class="person-tag ${b.lci==='tim'?'tag-tim':'tag-julie'}">${b.lci==='tim'?'Tim':'Julie'}</span>`:'—';
+    const emailLine=b.email?`<br><span style="color:#888;font-size:11px;">${b.email}</span>`:'';
+    const safeName=(b.name||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    return `<tr>
+      <td><span class="appt-type-badge ${badge}">${label}</span></td>
+      <td>${fmtDate(b.date)}<br><span style="color:#888;font-size:12px;">${fmtTime(b.start)}–${fmtTime(b.end)}</span></td>
+      <td>${b.name||''}</td>
+      <td>${b.phone||''}${emailLine}</td>
+      <td style="font-size:12px;">${b.location||''}</td>
+      <td>${lciCell}</td>
+      <td><button class="btn-cancel-booking" onclick="cancelBooking('${b.overlapId}','${safeName}')">Cancel</button></td>
+    </tr>`;
+  }).join('');
 }
 
 async function cancelBooking(overlapId, name){
