@@ -538,7 +538,7 @@ function renderRecipientSlots(){
   el.innerHTML=slots.map(o=>{
     const both=o.lcis.includes('tim')&&o.lcis.includes('julie');
     const lciLine=o.type==='60'&&!both?`<div style="font-size:12px;color:#666;margin-top:4px;">Instructor: ${o.lcis[0]==='tim'?'Tim (English)':'Julie (English & Spanish)'}</div>`:'';
-    const drop=both&&o.type==='60'?`<div class="lci-select-wrap visible"><label>Choose your preferred instructor:</label><select onchange="selectLCI('${o.id}',this.value)"><option value="">Select...</option><option value="tim">Tim (English)</option><option value="julie">Julie (English & Spanish)</option></select></div>`:'';
+    const drop=both&&o.type==='60'?`<div class="lci-select-wrap visible" onclick="event.stopPropagation()"><label>Choose your preferred instructor:</label><select onchange="selectLCI('${o.id}',this.value)" onclick="event.stopPropagation()"><option value="">Select...</option><option value="tim">Tim (English)</option><option value="julie">Julie (English & Spanish)</option></select></div>`:'';
     return`<div class="book-slot ${selectedOverlapId===o.id?'selected':''}" onclick="selectOverlap('${o.id}')"><div class="book-slot-date">${fmtDate(o.date)} · ${fmtTime(o.start)}–${fmtTime(o.end)}</div><div class="book-slot-details">${o.location}</div>${lciLine}${drop}</div>`;
   }).join('');
   document.getElementById('recipient-form').style.display=selectedOverlapId?'block':'none';
@@ -546,7 +546,16 @@ function renderRecipientSlots(){
 }
 
 function selectOverlap(id){selectedOverlapId=id;renderRecipientSlots();}
-function selectLCI(oid,val){selectedLCI[oid]=val;updateConfirmBtn();}
+function selectLCI(oid,val){
+  selectedLCI[oid]=val;
+  // Don't re-render — just keep the card selected and show the form
+  document.querySelectorAll('.book-slot').forEach(el=>{
+    const m=el.getAttribute('onclick').match(/'([^']+)'/);
+    if(m&&m[1]===oid){el.classList.add('selected');}
+  });
+  document.getElementById('recipient-form').style.display='block';
+  updateConfirmBtn();
+}
 
 function updateConfirmBtn(){
   const name=document.getElementById('rec-name').value.trim(),phone=document.getElementById('rec-phone').value.trim();
