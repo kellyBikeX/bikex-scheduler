@@ -462,8 +462,7 @@ function slotConflictsWithBookings(date, slotStartMins, slotEndMins) {
 
 function compute30MinSlots() {
   const results = [];
-  const today = new Date().toISOString().slice(0,10);
-  avails.filter(a => a.person === 'svbe' && a.date >= today).forEach(svbe => {
+  avails.filter(a => a.person === 'svbe').forEach(svbe => {
     const ws = timeToMins(svbe.start), we = timeToMins(svbe.end);
     for (let s = ws; s + 30 <= we; s += 30) {
       const e = s + 30;
@@ -478,8 +477,7 @@ function compute30MinSlots() {
 
 function compute60MinSlots() {
   const results = [];
-  const today = new Date().toISOString().slice(0,10);
-  const dates = [...new Set(avails.map(a => a.date))].filter(d => d >= today);
+  const dates = [...new Set(avails.map(a => a.date))];
   dates.forEach(date => {
     const svbeList = avails.filter(a => a.person === 'svbe' && a.date === date);
     const timList  = avails.filter(a => a.person === 'tim'  && a.date === date);
