@@ -550,8 +550,9 @@ function resetRecipient(){
 
 function renderRecipientSlots(){
   const el=document.getElementById('booking-slots');
-  const slots=(selectedApptType==='60'?compute60MinSlots():compute30MinSlots()).filter(o=>!o.booked);
-  if(!slots.length){el.innerHTML='<div class="empty-state" style="padding:2rem 0;">No pickup times available right now.<br>Please check back soon or contact BikeX at info@bikex.org.</div>';document.getElementById('recipient-form').style.display='none';return;}
+const today=new Date().toISOString().slice(0,10);
+  const nowMins=new Date().getHours()*60+new Date().getMinutes();
+  const slots=(selectedApptType==='60'?compute60MinSlots():compute30MinSlots()).filter(o=>!o.booked&&(o.date>today||(o.date===today&&timeToMins(o.end)>nowMins)));  if(!slots.length){el.innerHTML='<div class="empty-state" style="padding:2rem 0;">No pickup times available right now.<br>Please check back soon or contact BikeX at info@bikex.org.</div>';document.getElementById('recipient-form').style.display='none';return;}
   el.innerHTML=slots.map(o=>{
     const both=o.lcis.includes('tim')&&o.lcis.includes('julie');
     const lciLine=o.type==='60'&&!both?`<div style="font-size:12px;color:#666;margin-top:4px;">Instructor: ${o.lcis[0]==='tim'?'Tim (English)':'Julie (English & Spanish)'}</div>`:'';
